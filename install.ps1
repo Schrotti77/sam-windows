@@ -325,16 +325,13 @@ Log-Info "Database: $dataDir\sam.db"
 # ─── Step 6: npm install ─────────────────────────────────────────
 Log-Step 6 12 "Installing dependencies..."
 if (-not $Update -or -not (Test-Path "node_modules")) {
-    & npm install --legacy-peer-deps 2>&1 | ForEach-Object { Log-Info $_.ToString() }
-    if ($LASTEXITCODE -ne 0) {
-        Log-Err "npm install failed (exit code $LASTEXITCODE)"
-        exit 1
-    }
+    & npm install --legacy-peer-deps 2>&1 | ForEach-Object { Write-Info $_ }
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
     Log-Ok "Dependencies installed"
 
     # React patch
     if (Test-Path "scripts/patch-react.js") {
-        node scripts/patch-react.js 2>$null
+        & node scripts/patch-react.js 2>$null
     }
 } else {
     Log-Info "SKIPPED (node_modules exists)"
@@ -342,29 +339,37 @@ if (-not $Update -or -not (Test-Path "node_modules")) {
 
 # ─── Step 7: Prisma generate ──────────────────────────────────────
 Log-Step 7 12 "Generating Prisma client..."
-& npx prisma generate 2>&1 | ForEach-Object { Log-Info $_.ToString() }
-if ($LASTEXITCODE -ne 0) {
-    Log-Err "Prisma generate failed (exit code $LASTEXITCODE)"
+try {
+    & npx prisma generate 2>&1 | ForEach-Object { Write-Info $_ }
+    if ($LASTEXITCODE -ne 0) { throw "prisma generate failed" }
+    Log-Ok "Prisma client generated"
+} catch {
+    Log-Err "Prisma generate failed: $_"
     exit 1
 }
-Log-Ok "Prisma client generated"
 
 # ─── Step 8: Create database ─────────────────────────────────────
 Log-Step 8 12 "Creating SQLite database..."
-& npx prisma db push 2>&1 | ForEach-Object { Log-Info $_.ToString() }
-if ($LASTEXITCODE -ne 0) {
-    Log-Err "Database creation failed (exit code $LASTEXITCODE)"
+try {
+    & npx prisma db push 2>&1 | ForEach-Object { Write-Info $_ }
+    if ($LASTEXITCODE -ne 0) { throw "db push failed" }
+    Log-Ok "Database created"
+} catch {
+    Log-Err "Database creation failed: $_"
     exit 1
 }
-Log-Ok "Database created"
 
 # ─── Step 9: Seed database ────────────────────────────────────────
 Log-Step 9 12 "Seeding test data..."
 if (Test-Path "scripts/seed.js") {
     if (-not (Test-Path "$dataDir\sam.db") -or (Get-Item "$dataDir\sam.db").Length -lt 1024) {
-        & node scripts/seed.js 2>&1 | ForEach-Object { Log-Info $_.ToString() }
-        if ($LASTEXITCODE -ne 0) { Log-Warn "Seeding had warnings, continuing..." }
-        else { Log-Ok "Database seeded" }
+        try {
+            & node scripts/seed.js 2>&1 | ForEach-Object { Write-Info $_ }
+            if ($LASTEXITCODE -ne 0) { Write-Info "Seeding had warnings, continuing..." }
+            else { Log-Ok "Database seeded" }
+        } catch {
+            Write-Info "WARN: Seeding failed (non-fatal): $_"
+        }
     } else {
         Log-Info "Database already has data, skipping seed"
     }
@@ -372,12 +377,14 @@ if (Test-Path "scripts/seed.js") {
 
 # ─── Step 10: Build ───────────────────────────────────────────────
 Log-Step 10 12 "Building application..."
-& npm run build 2>&1 | ForEach-Object { Log-Info $_.ToString() }
-if ($LASTEXITCODE -ne 0) {
-    Log-Err "Build failed (exit code $LASTEXITCODE)"
+try {
+    & npm run build 2>&1 | ForEach-Object { Write-Info $_ }
+    if ($LASTEXITCODE -ne 0) { throw "build failed" }
+    Log-Ok "Build complete"
+} catch {
+    Log-Err "Build failed: $_"
     exit 1
 }
-Log-Ok "Build complete"
 
 # ─── Step 11: Firewall ────────────────────────────────────────────
 Log-Step 11 12 "Configuring Windows Firewall..."
