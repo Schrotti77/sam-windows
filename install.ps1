@@ -5,14 +5,16 @@
     Fully automated installation routine for SAM on Windows Server 2019.
     Downloads latest release from GitHub, installs Node.js (if needed),
     npm dependencies, creates SQLite database, seeds test data, builds
-    the app, configures firewall, and optionally registers as Windows
+    app, configures firewall, and optionally registers as Windows
     Service via NSSM.
 
     Default install location: C:\SAM
 .NOTES
-    Version: 4.5.1
+    Version: 4.5.2
     Requires: PowerShell 5.1+ (Windows Server 2019 default)
     Run as: Administrator
+    All commands run inline with iex for better error handling
+    Installationslog: C:\SAM\logs\install.log
 #>
 
 [CmdletBinding()]
@@ -29,31 +31,50 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 $RepoOwner = "schrotti77"
-$RepoName  = "sam-windows"
+$RepoName = "sam-windows"
 $Branch    = "main"
 $RepoUrl   = "https://github.com/$RepoOwner/$RepoName/archive/refs/heads/$Branch.zip"
 $ZipFile   = Join-Path $env:TEMP "sam-latest.zip"
 $ExtractDir = Join-Path $env:TEMP "sam-extract"
+$logDir    = Join-Path $InstallDir "logs"
+$logFile   = Join-Path $logDir "install.log"
 
-function Write-Step {
+# ─── Logging Functions ─────────────────────────────────────
+function Write-Log {
+    param([string]$Message)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logFile -Value "[$timestamp] $Message" -Encoding UTF8
+}
+
+function Log-Step {
     param([int]$Step, [int]$Total, [string]$Text)
     Write-Host ""
     Write-Host "[$Step/$Total] $Text" -ForegroundColor Yellow
+    Write-Log "[$Step/$Total] $Text"
 }
 
-function Write-Ok {
+function Log-Ok {
     param([string]$Text = "OK")
     Write-Host "  $Text" -ForegroundColor Green
+    Write-Log "OK: $Text"
 }
 
-function Write-Err {
+function Log-Err {
     param([string]$Text)
     Write-Host "  ERROR: $Text" -ForegroundColor Red
+    Write-Log "ERROR: $Text"
 }
 
-function Write-Info {
+function Log-Info {
     param([string]$Text)
     Write-Host "  $Text" -ForegroundColor Gray
+    Write-Log "INFO: $Text"
+}
+
+function Log-Warn {
+    param([string]$Text)
+    Write-Host "  WARN: $Text" -ForegroundColor Yellow
+    Write-Log "WARN: $Text"
 }
 
 function Test-Command {
@@ -61,28 +82,17 @@ function Test-Command {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
-function Invoke-Retry {
-    param(
-        [scriptblock]$Block,
-        [int]$MaxRetries = 3,
-        [string]$Name = "command"
-    )
-    $attempt = 0
-    while ($attempt -lt $MaxRetries) {
-        $attempt++
-        try {
-            & $Block
-            return $true
-        } catch {
-            if ($attempt -lt $MaxRetries) {
-                Write-Info "Retry $attempt/$MaxRetries for $Name..."
-                Start-Sleep -Seconds 3
-            } else {
-                throw
-            }
-        }
+function Invoke-Inline {
+    param([scriptblock]$Block, [string]$Name = "command")
+    try {
+        $output = & $Block 2>&1
+        Write-Log "Command: $Name"
+        if ($output) { Write-Log "Output: $output" }
+        return $output
+    } catch {
+        Write-Log "ERROR in $Name`: $_"
+        throw $_
     }
-    return $false
 }
 
 # ─── Banner ────────────────────────────────────────────────────────
@@ -92,37 +102,40 @@ Write-Host "  SAM v4.5 - Software Asset Management" -ForegroundColor Cyan
 Write-Host "  Windows Server 2019 - Auto-Installer" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
+Write-Log "=== Installation started ==="
+Write-Log "InstallDir: $InstallDir"
+Write-Log "LogFile: $logFile"
 
 # ─── Check Administrator ─────────────────────────────────────────
-Write-Step 0 12 "Checking permissions..."
+Log-Step 0 12 "Checking permissions..."
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Err "This script must be run as Administrator!"
+    Log-Err "This script must be run as Administrator!"
     Write-Info "Right-click PowerShell -> 'Run as Administrator'"
     exit 1
 }
-Write-Ok "Running as Administrator"
+Log-Ok "Running as Administrator"
 
 # ─── Step 1: PowerShell version ───────────────────────────────────
-Write-Step 1 12 "Checking PowerShell version..."
+Log-Step 1 12 "Checking PowerShell version..."
 $psVersion = $PSVersionTable.PSVersion
 if ($psVersion.Major -lt 5) {
-    Write-Err "PowerShell 5.0+ required. Current: $psVersion"
+    Log-Err "PowerShell 5.0+ required. Current: $psVersion"
     exit 1
 }
-Write-Ok "PowerShell $psVersion"
+Log-Ok "PowerShell $psVersion"
 
 # ─── Step 2: Node.js ──────────────────────────────────────────────
-Write-Step 2 12 "Checking Node.js..."
+Log-Step 2 12 "Checking Node.js..."
 if (-not $SkipNodeCheck) {
     $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
     if ($nodeCmd) {
-        $nodeVersion = & node --version 2>$null
+        $nodeVersion = Invoke-Inline { node --version } "node --version"
         $nodeMajor = [int]($nodeVersion -replace '^v(\d+).*', '$1')
         if ($nodeMajor -ge 18) {
-            Write-Ok "Node.js $nodeVersion"
+            Log-Ok "Node.js $nodeVersion"
         } else {
-            Write-Info "Node.js $nodeVersion found but 18+ recommended. Upgrading..."
+            Log-Warn "Node.js $nodeVersion found but 18+ recommended. Upgrading..."
             $upgradeNode = $true
         }
     } else {
@@ -130,41 +143,41 @@ if (-not $SkipNodeCheck) {
     }
 
     if ($upgradeNode) {
-        Write-Info "Downloading Node.js 20 LTS..."
+        Log-Info "Downloading Node.js 20 LTS..."
         $nodeUrl = "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
         $nodeMsi = Join-Path $env:TEMP "node-installer.msi"
 
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -Uri $nodeUrl -OutFile $nodeMsi -UseBasicParsing
-            Write-Info "Installing Node.js..."
+            Log-Info "Installing Node.js..."
             Start-Process msiexec.exe -ArgumentList "/i `"$nodeMsi`" /qn /norestart" -Wait -NoNewWindow
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
             Remove-Item $nodeMsi -Force -ErrorAction SilentlyContinue
-            $nodeVersion = & node --version 2>$null
-            Write-Ok "Node.js $nodeVersion installed"
+            $nodeVersion = Invoke-Inline { node --version } "node --version"
+            Log-Ok "Node.js $nodeVersion installed"
         } catch {
-            Write-Err "Failed to install Node.js: $_"
-            Write-Info "Install manually: https://nodejs.org"
+            Log-Err "Failed to install Node.js: $_"
+            Log-Info "Install manually: https://nodejs.org"
             exit 1
         }
     }
 
     if (-not (Test-Command npm)) {
-        Write-Err "npm not found after Node.js install"
+        Log-Err "npm not found after Node.js install"
         exit 1
     }
-    $npmVersion = & npm --version 2>$null
-    Write-Ok "npm $npmVersion"
+    $npmVersion = Invoke-Inline { npm --version } "npm --version"
+    Log-Ok "npm $npmVersion"
 } else {
-    Write-Info "SKIPPED"
+    Log-Info "SKIPPED"
 }
 
 # ─── Step 3: Download latest SAM from GitHub ─────────────────────
-Write-Step 3 12 "Downloading SAM from GitHub..."
+Log-Step 3 12 "Downloading SAM from GitHub..."
 
 if ($Update) {
-    Write-Info "Update mode - downloading latest version..."
+    Log-Info "Update mode - downloading latest version..."
 }
 
 # Cleanup old temp files
@@ -178,37 +191,35 @@ try {
     $runningFromInstall = ($PWD.Path -eq $InstallDir) -or (Test-Path "$InstallDir\install.ps1")
 
     if ($runningFromInstall -and -not $Update) {
-        Write-Info "Already in install directory. Skipping download."
-        Write-Info "Use -Update to download the latest version."
+        Log-Info "Already in install directory. Skipping download."
+        Log-Info "Use -Update to download latest version."
     } else {
-        Write-Info "URL: $RepoUrl"
-        Invoke-Retry -MaxRetries 3 -Name "Download SAM" -Block {
-            Invoke-WebRequest -Uri $RepoUrl -OutFile $ZipFile -UseBasicParsing
-        }
+        Log-Info "URL: $RepoUrl"
+        Invoke-Inline { Invoke-WebRequest -Uri $RepoUrl -OutFile $ZipFile -UseBasicParsing } "Download SAM"
 
         if (-not (Test-Path $ZipFile)) {
-            Write-Err "Download failed"
+            Log-Err "Download failed"
             exit 1
         }
 
         $zipSize = (Get-Item $ZipFile).Length / 1KB
-        Write-Ok "Downloaded ($([math]::Round($zipSize, 1)) KB)"
+        Log-Ok "Downloaded ($([math]::Round($zipSize, 1)) KB)"
 
         # Extract
-        Write-Info "Extracting..."
+        Log-Info "Extracting..."
         Expand-Archive -Path $ZipFile -DestinationPath $ExtractDir -Force
 
         # Find extracted folder (GitHub zip creates sam-windows-main/ folder)
         $extractedFolder = Get-ChildItem $ExtractDir -Directory | Select-Object -First 1
         if (-not $extractedFolder) {
-            Write-Err "Extraction failed - no folder found"
+            Log-Err "Extraction failed - no folder found"
             exit 1
         }
 
         # Create/prepare install directory
         if (Test-Path $InstallDir) {
             if ($Update) {
-                Write-Info "Updating existing installation at $InstallDir..."
+                Log-Info "Updating existing installation at $InstallDir..."
                 # Backup .env and database
                 $backupDir = Join-Path $env:TEMP "sam-backup-$(Get-Random)"
                 New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
@@ -226,17 +237,17 @@ try {
                 }
                 Remove-Item $backupDir -Recurse -Force -ErrorAction SilentlyContinue
             } else {
-                Write-Err "Install directory already exists: $InstallDir"
-                Write-Info "Use -Update to update an existing installation"
+                Log-Err "Install directory already exists: $InstallDir"
+                Log-Info "Use -Update to update an existing installation"
                 exit 1
             }
         } else {
-            Write-Info "Creating $InstallDir..."
+            Log-Info "Creating $InstallDir..."
             New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
             Copy-Item "$($extractedFolder.FullName)\*" $InstallDir -Recurse -Force
         }
 
-        Write-Ok "Files extracted to $InstallDir"
+        Log-Ok "Files extracted to $InstallDir"
     }
 
     # Cleanup temp files
@@ -244,32 +255,32 @@ try {
     Remove-Item $ExtractDir -Force -Recurse -ErrorAction SilentlyContinue
 
 } catch {
-    Write-Err "Download/extract failed: $_"
-    Write-Info "Download manually: $RepoUrl"
+    Log-Err "Download/extract failed: $_"
+    Log-Info "Download manually: $RepoUrl"
     exit 1
 }
 
 # ─── Change to install directory ─────────────────────────────────
 Set-Location $InstallDir
-Write-Info "Working directory: $PWD"
+Log-Info "Working directory: $PWD"
 
 # ─── Step 4: Data directory ───────────────────────────────────────
-Write-Step 4 12 "Setting up data directory..."
+Log-Step 4 12 "Setting up data directory..."
 $dataDir = Join-Path $InstallDir "data"
 if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 }
-Write-Ok "Data directory: $dataDir"
+Log-Ok "Data directory: $dataDir"
 
 # ─── Step 5: .env file ───────────────────────────────────────────
-Write-Step 5 12 "Configuring environment..."
+Log-Step 5 12 "Configuring environment..."
 
 $envFile = Join-Path $InstallDir ".env"
 $needsEnvUpdate = $true
 
 # Preserve existing .env on update
 if ((Test-Path $envFile) -and $Update) {
-    Write-Info "Preserving existing .env configuration"
+    Log-Info "Preserving existing .env configuration"
     $needsEnvUpdate = $false
 }
 
@@ -297,83 +308,83 @@ NEXTAUTH_SECRET="$authSecret"
 NEXTAUTH_URL="http://localhost:$Port"
 "@
     Set-Content -Path $envFile -Value $envContent -Encoding UTF8
-    Write-Ok ".env created with secure NEXTAUTH_SECRET"
+    Log-Ok ".env created with secure NEXTAUTH_SECRET"
 } else {
-    Write-Ok ".env preserved"
+    Log-Ok ".env preserved"
 }
-Write-Info "Database: $dataDir\sam.db"
+Log-Info "Database: $dataDir\sam.db"
 
 # ─── Step 6: npm install ─────────────────────────────────────────
-Write-Step 6 12 "Installing dependencies..."
+Log-Step 6 12 "Installing dependencies..."
 if (-not $Update -or -not (Test-Path "node_modules")) {
     try {
-        & npm install --legacy-peer-deps 2>&1 | ForEach-Object { Write-Info $_ }
+        Invoke-Inline { npm install --legacy-peer-deps } "npm install"
         if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
-        Write-Ok "Dependencies installed"
+        Log-Ok "Dependencies installed"
     } catch {
-        Write-Err "npm install failed: $_"
+        Log-Err "npm install failed: $_"
         exit 1
     }
 
     # React patch
     if (Test-Path "scripts/patch-react.js") {
-        & node scripts/patch-react.js 2>$null
+        Invoke-Inline { node scripts/patch-react.js } "patch-react"
     }
 } else {
-    Write-Info "SKIPPED (node_modules exists)"
+    Log-Info "SKIPPED (node_modules exists)"
 }
 
 # ─── Step 7: Prisma generate ──────────────────────────────────────
-Write-Step 7 12 "Generating Prisma client..."
+Log-Step 7 12 "Generating Prisma client..."
 try {
-    & npx prisma generate 2>&1 | ForEach-Object { Write-Info $_ }
+    Invoke-Inline { npx prisma generate } "prisma generate"
     if ($LASTEXITCODE -ne 0) { throw "prisma generate failed" }
-    Write-Ok "Prisma client generated"
+    Log-Ok "Prisma client generated"
 } catch {
-    Write-Err "Prisma generate failed: $_"
+    Log-Err "Prisma generate failed: $_"
     exit 1
 }
 
 # ─── Step 8: Create database ─────────────────────────────────────
-Write-Step 8 12 "Creating SQLite database..."
+Log-Step 8 12 "Creating SQLite database..."
 try {
-    & npx prisma db push 2>&1 | ForEach-Object { Write-Info $_ }
+    Invoke-Inline { npx prisma db push } "prisma db push"
     if ($LASTEXITCODE -ne 0) { throw "db push failed" }
-    Write-Ok "Database created"
+    Log-Ok "Database created"
 } catch {
-    Write-Err "Database creation failed: $_"
+    Log-Err "Database creation failed: $_"
     exit 1
 }
 
 # ─── Step 9: Seed database ────────────────────────────────────────
-Write-Step 9 12 "Seeding test data..."
+Log-Step 9 12 "Seeding test data..."
 if (Test-Path "scripts/seed.js") {
     if (-not (Test-Path "$dataDir\sam.db") -or (Get-Item "$dataDir\sam.db").Length -lt 1024) {
         try {
-            & node scripts/seed.js 2>&1 | ForEach-Object { Write-Info $_ }
-            if ($LASTEXITCODE -ne 0) { Write-Info "Seeding had warnings, continuing..." }
-            else { Write-Ok "Database seeded" }
+            Invoke-Inline { node scripts/seed.js } "seed database"
+            if ($LASTEXITCODE -ne 0) { Log-Warn "Seeding had warnings, continuing..." }
+            else { Log-Ok "Database seeded" }
         } catch {
-            Write-Info "WARN: Seeding failed (non-fatal): $_"
+            Log-Warn "WARN: Seeding failed (non-fatal): $_"
         }
     } else {
-        Write-Info "Database already has data, skipping seed"
+        Log-Info "Database already has data, skipping seed"
     }
 }
 
 # ─── Step 10: Build ───────────────────────────────────────────────
-Write-Step 10 12 "Building application..."
+Log-Step 10 12 "Building application..."
 try {
-    & npm run build 2>&1 | ForEach-Object { Write-Info $_ }
+    Invoke-Inline { npm run build } "npm run build"
     if ($LASTEXITCODE -ne 0) { throw "build failed" }
-    Write-Ok "Build complete"
+    Log-Ok "Build complete"
 } catch {
-    Write-Err "Build failed: $_"
+    Log-Err "Build failed: $_"
     exit 1
 }
 
 # ─── Step 11: Firewall ────────────────────────────────────────────
-Write-Step 11 12 "Configuring Windows Firewall..."
+Log-Step 11 12 "Configuring Windows Firewall..."
 if (-not $SkipFirewall) {
     try {
         $ruleName = "SAM - Software Asset Management (Port $Port)"
@@ -382,23 +393,23 @@ if (-not $SkipFirewall) {
             -Direction Inbound -Protocol TCP -LocalPort $Port `
             -Action Allow -Profile Domain,Private `
             -Description "Allow HTTP access to SAM on port $Port" | Out-Null
-        Write-Ok "Firewall rule created for port $Port"
+        Log-Ok "Firewall rule created for port $Port"
     } catch {
-        Write-Info "WARN: Could not set firewall rule: $_"
+        Log-Warn "WARN: Could not set firewall rule: $_"
     }
 } else {
-    Write-Info "SKIPPED"
+    Log-Info "SKIPPED"
 }
 
 # ─── Step 12: Windows Service (optional) ─────────────────────────
 if ($SetupService) {
-    Write-Step 12 12 "Setting up Windows Service (NSSM)..."
+    Log-Step 12 12 "Setting up Windows Service (NSSM)..."
 
     $nssmExe = "C:\Windows\nssm.exe"
     $serviceName = "SAM"
 
     if (-not (Test-Path $nssmExe)) {
-        Write-Info "Downloading NSSM..."
+        Log-Info "Downloading NSSM..."
         try {
             $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
             $nssmZip = Join-Path $env:TEMP "nssm.zip"
@@ -413,14 +424,14 @@ if ($SetupService) {
 
             if ($nssmBin) {
                 Copy-Item $nssmBin.FullName -Destination $nssmExe -Force
-                Write-Ok "NSSM installed"
+                Log-Ok "NSSM installed"
             } else {
-                Write-Info "WARN: Could not find nssm.exe in archive"
+                Log-Warn "WARN: Could not find nssm.exe in archive"
             }
             Remove-Item $nssmZip -Force -ErrorAction SilentlyContinue
             Remove-Item $nssmExtract -Force -Recurse -ErrorAction SilentlyContinue
         } catch {
-            Write-Info "WARN: NSSM download failed: $_"
+            Log-Warn "WARN: NSSM download failed: $_"
         }
     }
 
@@ -428,25 +439,26 @@ if ($SetupService) {
         $nodeExe = (Get-Command node).Source
 
         # Remove existing service
-        & $nssmExe stop $serviceName 2>$null
-        & $nssmExe remove $serviceName confirm 2>$null
+        Invoke-Inline { nssm stop $serviceName } "nssm stop"
+        Invoke-Inline { nssm remove $serviceName confirm } "nssm remove"
 
         # Install service
-        & $nssmExe install $serviceName $nodeExe "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" "start" "--prefix" $InstallDir
-        & $nssmExe set $serviceName AppDirectory $InstallDir
-        & $nssmExe set $serviceName DisplayName "SAM - Software Asset Management"
-        & $nssmExe set $serviceName Description "Software Asset Management web application"
-        & $nssmExe set $serviceName Start SERVICE_AUTO_START
+        Invoke-Inline { nssm install $serviceName $nodeExe "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" "start" "--prefix" $InstallDir } "nssm install"
+        Invoke-Inline { nssm set $serviceName AppDirectory $InstallDir } "nssm set AppDirectory"
+        Invoke-Inline { nssm set $serviceName AppEnvironmentExtra DATABASE_URL=$dbPath NEXTAUTH_SECRET=*** NEXTAUTH_URL="http://localhost:$Port" } "nssm set AppEnvironmentExtra"
+        Invoke-Inline { nssm set $serviceName DisplayName "SAM - Software Asset Management" } "nssm set DisplayName"
+        Invoke-Inline { nssm set $serviceName Description "Software Asset Management web application" } "nssm set Description"
+        Invoke-Inline { nssm set $serviceName Start SERVICE_AUTO_START } "nssm set Start"
 
         # Logs
         $logsDir = Join-Path $InstallDir "logs"
         if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
-        & $nssmExe set $serviceName AppStdout "$logsDir\service-stdout.log"
-        & $nssmExe set $serviceName AppStderr "$logsDir\service-stderr.log"
+        Invoke-Inline { nssm set $serviceName AppStdout "$logsDir\service-stdout.log" } "nssm set AppStdout"
+        Invoke-Inline { nssm set $serviceName AppStderr "$logsDir\service-stderr.log" } "nssm set AppStderr"
 
-        Write-Ok "Windows Service '$serviceName' registered"
-        Write-Info "Start: net start $serviceName"
-        Write-Info "Stop:  net stop $serviceName"
+        Log-Ok "Windows Service '$serviceName' registered"
+        Log-Info "Start: net start $serviceName"
+        Log-Info "Stop: net stop $serviceName"
     }
 } else {
     Write-Host ""
@@ -467,6 +479,8 @@ Write-Host "    cd $InstallDir" -ForegroundColor Gray
 Write-Host "    .\start.ps1            Start app (production)" -ForegroundColor Gray
 Write-Host "    .\start.ps1 -Dev       Start app (development)" -ForegroundColor Gray
 Write-Host "    .\stop.ps1             Stop app" -ForegroundColor Gray
+Write-Host ""
+Write-Log "=== Installation complete ==="
 Write-Host ""
 
 if (-not $SetupService) {
