@@ -96,8 +96,11 @@ function Invoke-Inline {
     }
 }
 
-# ─── Create log directory early (needed for all Write-Log calls) ───
-New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+# ─── Logging to TEMP first, move to C:\SAM\logs after extract ─────
+# Avoids creating C:\SAM before Step 3 checks if it already exists.
+$tempLogDir = Join-Path $env:TEMP "sam-install-logs"
+New-Item -ItemType Directory -Path $tempLogDir -Force | Out-Null
+$logDir = $tempLogDir
 
 # ─── Banner ────────────────────────────────────────────────────────
 Write-Host ""
@@ -263,6 +266,17 @@ try {
     Log-Info "Download manually: $RepoUrl"
     exit 1
 }
+
+# ─── Move log from TEMP to C:\SAM\logs (after install dir confirmed) ──
+$finalLogDir = Join-Path $InstallDir "logs"
+New-Item -ItemType Directory -Path $finalLogDir -Force | Out-Null
+$tempLogFile = Join-Path $tempLogDir "install.log"
+$finalLogFile = Join-Path $finalLogDir "install.log"
+if (Test-Path $tempLogFile) {
+    Copy-Item $tempLogFile $finalLogFile -Force
+    Remove-Item $tempLogDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+$logDir = $finalLogDir
 
 # ─── Change to install directory ─────────────────────────────────
 Set-Location $InstallDir
