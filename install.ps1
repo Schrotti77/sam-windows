@@ -334,17 +334,18 @@ NEXTAUTH_URL="http://localhost:$Port"
 Log-Info "Database: $dataDir\sam.db"
 
 # ─── Step 6: npm install ─────────────────────────────────────────
-Log-Step 6 12 "Installing dependencies..."
+Log-Step 6 12 "Installing dependencies (this may take a minute)..."
 if (-not $Update -or -not (Test-Path "node_modules")) {
-    $npmOutput = npm install --legacy-peer-deps 2>&1 | ForEach-Object {
-        $line = "$_"
-        # Suppress npm warn/deprecated noise from console
-        if ($line -match 'npm warn') { Log-Info $line.Trim() }
-        else { Write-Host "  $line" -ForegroundColor Gray; Log-Info $line.Trim() }
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Log-Err "npm install failed (exit code $LASTEXITCODE)"
-        Log-Info "Output: $npmOutput"
+    # PowerShell 5.1 treats native stderr (npm warnings) as errors.
+    # Temporarily switch ErrorAction to Continue so warnings don't abort install.
+    $prevErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & npm install --legacy-peer-deps 2>&1 | Out-Null
+    $npmExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevErrorAction
+
+    if ($npmExit -ne 0) {
+        Log-Err "npm install failed (exit code $npmExit)"
         exit 1
     }
     Log-Ok "Dependencies installed"
@@ -359,37 +360,39 @@ if (-not $Update -or -not (Test-Path "node_modules")) {
 
 # ─── Step 7: Prisma generate ──────────────────────────────────────
 Log-Step 7 12 "Generating Prisma client..."
-try {
-    Invoke-Inline { npx prisma generate } "prisma generate"
-    if ($LASTEXITCODE -ne 0) { throw "prisma generate failed" }
-    Log-Ok "Prisma client generated"
-} catch {
-    Log-Err "Prisma generate failed: $_"
+$prevErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& npx prisma generate 2>&1 | Out-Null
+$prismaExit = $LASTEXITCODE
+$ErrorActionPreference = $prevErrorAction
+if ($prismaExit -ne 0) {
+    Log-Err "Prisma generate failed (exit code $prismaExit)"
     exit 1
 }
+Log-Ok "Prisma client generated"
 
 # ─── Step 8: Create database ─────────────────────────────────────
 Log-Step 8 12 "Creating SQLite database..."
-try {
-    Invoke-Inline { npx prisma db push } "prisma db push"
-    if ($LASTEXITCODE -ne 0) { throw "db push failed" }
-    Log-Ok "Database created"
-} catch {
-    Log-Err "Database creation failed: $_"
+$ErrorActionPreference = "Continue"
+& npx prisma db push 2>&1 | Out-Null
+$dbExit = $LASTEXITCODE
+$ErrorActionPreference = $prevErrorAction
+if ($dbExit -ne 0) {
+    Log-Err "Database creation failed (exit code $dbExit)"
     exit 1
 }
+Log-Ok "Database created"
 
 # ─── Step 9: Seed database ────────────────────────────────────────
 Log-Step 9 12 "Seeding test data..."
 if (Test-Path "scripts/seed.js") {
     if (-not (Test-Path "$dataDir\sam.db") -or (Get-Item "$dataDir\sam.db").Length -lt 1024) {
-        try {
-            Invoke-Inline { node scripts/seed.js } "seed database"
-            if ($LASTEXITCODE -ne 0) { Log-Warn "Seeding had warnings, continuing..." }
-            else { Log-Ok "Database seeded" }
-        } catch {
-            Log-Warn "WARN: Seeding failed (non-fatal): $_"
-        }
+        $ErrorActionPreference = "Continue"
+        & node scripts/seed.js 2>&1 | Out-Null
+        $seedExit = $LASTEXITCODE
+        $ErrorActionPreference = "Continue"
+        if ($seedExit -ne 0) { Log-Warn "Seeding had warnings, continuing..." }
+        else { Log-Ok "Database seeded" }
     } else {
         Log-Info "Database already has data, skipping seed"
     }
@@ -397,14 +400,15 @@ if (Test-Path "scripts/seed.js") {
 
 # ─── Step 10: Build ───────────────────────────────────────────────
 Log-Step 10 12 "Building application..."
-try {
-    Invoke-Inline { npm run build } "npm run build"
-    if ($LASTEXITCODE -ne 0) { throw "build failed" }
-    Log-Ok "Build complete"
-} catch {
-    Log-Err "Build failed: $_"
+$ErrorActionPreference = "Continue"
+& npm run build 2>&1 | Out-Null
+$buildExit = $LASTEXITCODE
+$ErrorActionPreference = "prevErrorAction"
+if ($buildExit -ne 0) {
+    Log-Err "Build failed (exit code $buildExit)"
     exit 1
 }
+Log-Ok "Build complete"
 
 # ─── Step 11: Firewall ────────────────────────────────────────────
 Log-Step 11 12 "Configuring Windows Firewall..."
