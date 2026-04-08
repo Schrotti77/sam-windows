@@ -92,7 +92,8 @@ function Invoke-Inline {
         return $output
     } catch {
         Write-Log "ERROR in $Name`: $_"
-        throw $_
+        # Do NOT throw — let caller check $LASTEXITCODE
+        return $_
     }
 }
 
@@ -335,18 +336,22 @@ Log-Info "Database: $dataDir\sam.db"
 # ─── Step 6: npm install ─────────────────────────────────────────
 Log-Step 6 12 "Installing dependencies..."
 if (-not $Update -or -not (Test-Path "node_modules")) {
-    try {
-        Invoke-Inline { npm install --legacy-peer-deps } "npm install"
-        if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
-        Log-Ok "Dependencies installed"
-    } catch {
-        Log-Err "npm install failed: $_"
+    $npmOutput = npm install --legacy-peer-deps 2>&1 | ForEach-Object {
+        $line = "$_"
+        # Suppress npm warn/deprecated noise from console
+        if ($line -match 'npm warn') { Log-Info $line.Trim() }
+        else { Write-Host "  $line" -ForegroundColor Gray; Log-Info $line.Trim() }
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Log-Err "npm install failed (exit code $LASTEXITCODE)"
+        Log-Info "Output: $npmOutput"
         exit 1
     }
+    Log-Ok "Dependencies installed"
 
     # React patch
     if (Test-Path "scripts/patch-react.js") {
-        Invoke-Inline { node scripts/patch-react.js } "patch-react"
+        node scripts/patch-react.js 2>$null
     }
 } else {
     Log-Info "SKIPPED (node_modules exists)"
