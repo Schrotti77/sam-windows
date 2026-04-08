@@ -108,7 +108,7 @@ Log-Step 0 12 "Checking permissions..."
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Log-Err "This script must be run as Administrator!"
-    Write-Info "Right-click PowerShell -> 'Run as Administrator'"
+    Log-Info "Right-click PowerShell -> 'Run as Administrator'"
     exit 1
 }
 Log-Ok "Running as Administrator"
@@ -325,7 +325,7 @@ Log-Info "Database: $dataDir\sam.db"
 # ─── Step 6: npm install ─────────────────────────────────────────
 Log-Step 6 12 "Installing dependencies..."
 if (-not $Update -or -not (Test-Path "node_modules")) {
-    & npm install --legacy-peer-deps 2>&1 | ForEach-Object { Write-Info $_ }
+    & npm install --legacy-peer-deps 2>&1 | ForEach-Object { Log-Info "$_" }
     if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
     Log-Ok "Dependencies installed"
 
@@ -340,7 +340,7 @@ if (-not $Update -or -not (Test-Path "node_modules")) {
 # ─── Step 7: Prisma generate ──────────────────────────────────────
 Log-Step 7 12 "Generating Prisma client..."
 try {
-    & npx prisma generate 2>&1 | ForEach-Object { Write-Info $_ }
+    & npx prisma generate 2>&1 | ForEach-Object { Log-Info "$_" }
     if ($LASTEXITCODE -ne 0) { throw "prisma generate failed" }
     Log-Ok "Prisma client generated"
 } catch {
@@ -351,7 +351,7 @@ try {
 # ─── Step 8: Create database ─────────────────────────────────────
 Log-Step 8 12 "Creating SQLite database..."
 try {
-    & npx prisma db push 2>&1 | ForEach-Object { Write-Info $_ }
+    & npx prisma db push 2>&1 | ForEach-Object { Log-Info "$_" }
     if ($LASTEXITCODE -ne 0) { throw "db push failed" }
     Log-Ok "Database created"
 } catch {
@@ -364,11 +364,11 @@ Log-Step 9 12 "Seeding test data..."
 if (Test-Path "scripts/seed.js") {
     if (-not (Test-Path "$dataDir\sam.db") -or (Get-Item "$dataDir\sam.db").Length -lt 1024) {
         try {
-            & node scripts/seed.js 2>&1 | ForEach-Object { Write-Info $_ }
-            if ($LASTEXITCODE -ne 0) { Write-Info "Seeding had warnings, continuing..." }
+            & node scripts/seed.js 2>&1 | ForEach-Object { Log-Info "$_" }
+            if ($LASTEXITCODE -ne 0) { Log-Info "Seeding had warnings, continuing..." }
             else { Log-Ok "Database seeded" }
         } catch {
-            Write-Info "WARN: Seeding failed (non-fatal): $_"
+            Log-Warn "Seeding failed (non-fatal): $_"
         }
     } else {
         Log-Info "Database already has data, skipping seed"
@@ -378,7 +378,7 @@ if (Test-Path "scripts/seed.js") {
 # ─── Step 10: Build ───────────────────────────────────────────────
 Log-Step 10 12 "Building application..."
 try {
-    & npm run build 2>&1 | ForEach-Object { Write-Info $_ }
+    & npm run build 2>&1 | ForEach-Object { Log-Info "$_" }
     if ($LASTEXITCODE -ne 0) { throw "build failed" }
     Log-Ok "Build complete"
 } catch {
