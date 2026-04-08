@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  firstName String?
+  lastName  String?
+  password  String
+  role      String   @default("IT_ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vendor {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  contactEmail   String?
+  contactPhone   String?
+  website        String?
+  address        String?
+  supportEmail   String?
+  supportPhone   String?
+  accountManager String?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  software       Software[]
+  costs          SoftwareCost[]
+  contracts      Contract[]
+}
+
+model Software {
+  id                    String    @id @default(cuid())
+  name                  String
+  version               String?
+  releaseDate           DateTime?
+  description           String?
+  functionality         String?
+  assetId               String?   @unique
+  serialNumber          String?
+  licenseKey            String?
+  dataPrivacySensitive  Boolean   @default(false)
+  technologyPlatform    String?
+  installLocation       String?
+  installationDate      DateTime?
+  lastPatchDate         DateTime?
+  maintenanceContract   String?
+  supportExpiry         DateTime?
+  acquisitionCost       Float?
+  budgetAllocation      String?
+  costPerUser           Float?
+  shadowIT              Boolean   @default(false)
+  plannedDecommission   DateTime?
+  decommissionReason    String?
+  itAdministrator       String?
+  businessOwner         String?
+  procurementContact    String?
+  vendorContact         String?
+  acceptableUsePolicy   String?
+  category              String    @default("SAAS")
+  deploymentType        String?
+  environment           String?
+  deploymentStatus      String    @default("PLANNED")
+  updateStatus          String    @default("UP_TO_DATE")
+  supportLevel          String?
+  complianceStatus      String    @default("COMPLIANT")
+  lifecycleStatus       String    @default("IN_USE")
+  // Additional fields referenced by API routes (added for SQLite migration)
+  dependencies          String?
+  businessCriticality   String?
+  configurationDetails  String?
+  hardwareAssociations  String?
+  primaryLicenseType    String?
+  deploymentLimits      String?
+  knownVulnerabilities  String?
+  securityRisks         String?
+  maintenanceHistory    String?
+  roiCalculation        String?
+  depreciationSchedule  String?
+  regulatoryCompliance  String?
+  riskAssessment        String?
+  auditHistory          String?
+  needsAssessment       String?
+  reuseOptions          String?
+  governancePolicies    String?
+  vendorId              String?
+  vendor                Vendor?   @relation(fields: [vendorId], references: [id])
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  licenses              License[]
+  costs                 SoftwareCost[]
+  alerts                ComplianceAlert[]
+  assignments           SoftwareAssignment[]
+}
+
+model License {
+  id                String    @id @default(cuid())
+  softwareId        String
+  software          Software  @relation(fields: [softwareId], references: [id])
+  licenseType       String    @default("SUBSCRIPTION")
+  totalLicenses     Int
+  usedLicenses      Int       @default(0)
+  availableLicenses Int       @default(0)
+  costPerLicense    Float?
+  purchaseDate      DateTime?
+  expirationDate    DateTime?
+  renewalDate       DateTime?
+  isAutoRenewal     Boolean   @default(false)
+  complianceStatus  String    @default("COMPLIANT")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model SoftwareAssignment {
+  id         String   @id @default(cuid())
+  softwareId String
+  software   Software @relation(fields: [softwareId], references: [id])
+  userId     String
+  assignedBy String?
+  assignedAt DateTime @default(now())
+  status     String   @default("ACTIVE")
+  notes      String?
+}
+
+model Contract {
+  id             String   @id @default(cuid())
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  contractNumber String   @unique
+  title          String
+  startDate      DateTime
+  endDate        DateTime
+  renewalDate    DateTime?
+  contractValue  Float
+  paymentTerms   String?
+  renewalTerms   String?
+  status         String   @default("ACTIVE")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SoftwareCost {
+  id            String   @id @default(cuid())
+  softwareId    String
+  software      Software @relation(fields: [softwareId], references: [id])
+  vendorId      String?
+  vendor        Vendor?  @relation(fields: [vendorId], references: [id])
+  costType      String   @default("LICENSE")
+  amount        Float
+  currency      String   @default("EUR")
+  billingPeriod String   @default("MONTHLY")
+  costDate      DateTime
+  description   String?
+  category      String?
+  department    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Budget {
+  id              String   @id @default(cuid())
+  name            String
+  department      String?
+  category        String?
+  budgetAmount    Float
+  spentAmount     Float    @default(0)
+  remainingAmount Float    @default(0)
+  fiscalYear      Int
+  startDate       DateTime
+  endDate         DateTime
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ComplianceAlert {
+  id            String    @id @default(cuid())
+  title         String
+  description   String
+  alertType     String    @default("LICENSE_EXPIRY")
+  severity      String    @default("MEDIUM")
+  relatedEntity String
+  entityType    String    @default("SOFTWARE")
+  isResolved    Boolean   @default(false)
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  softwareId    String?
+  software      Software? @relation(fields: [softwareId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
