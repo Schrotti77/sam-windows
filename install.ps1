@@ -95,6 +95,9 @@ function Invoke-Inline {
     }
 }
 
+# ─── Create log directory early (needed for all Write-Log calls) ───
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+
 # ─── Banner ────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
