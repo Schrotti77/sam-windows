@@ -27,7 +27,10 @@ param(
     [switch]$Update
 )
 
-$ErrorActionPreference = "Stop"
+# Note: We do NOT set $ErrorActionPreference = "Stop" globally.
+# PowerShell 5.1 treats native stderr output (npm warnings, etc.)
+# as ErrorRecord objects with "Stop" preference, causing immediate abort
+# even when commands succeed. We rely on $LASTEXITCODE instead.
 $ProgressPreference = "SilentlyContinue"
 
 $RepoOwner = "schrotti77"
@@ -83,20 +86,6 @@ function Test-Command {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
-function Invoke-Inline {
-    param([scriptblock]$Block, [string]$Name = "command")
-    try {
-        $output = & $Block 2>&1
-        Write-Log "Command: $Name"
-        if ($output) { Write-Log "Output: $output" }
-        return $output
-    } catch {
-        Write-Log "ERROR in $Name`: $_"
-        # Do NOT throw — let caller check $LASTEXITCODE
-        return $_
-    }
-}
-
 # ─── Logging to TEMP first, move to C:\SAM\logs after extract ─────
 # Avoids creating C:\SAM before Step 3 checks if it already exists.
 $tempLogDir = Join-Path $env:TEMP "sam-install-logs"
@@ -138,7 +127,7 @@ Log-Step 2 12 "Checking Node.js..."
 if (-not $SkipNodeCheck) {
     $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
     if ($nodeCmd) {
-        $nodeVersion = Invoke-Inline { node --version } "node --version"
+        $nodeVersion = node --version 2>&1
         $nodeMajor = [int]($nodeVersion -replace '^v(\d+).*', '$1')
         if ($nodeMajor -ge 18) {
             Log-Ok "Node.js $nodeVersion"
@@ -162,7 +151,7 @@ if (-not $SkipNodeCheck) {
             Start-Process msiexec.exe -ArgumentList "/i `"$nodeMsi`" /qn /norestart" -Wait -NoNewWindow
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
             Remove-Item $nodeMsi -Force -ErrorAction SilentlyContinue
-            $nodeVersion = Invoke-Inline { node --version } "node --version"
+            $nodeVersion = node --version 2>&1
             Log-Ok "Node.js $nodeVersion installed"
         } catch {
             Log-Err "Failed to install Node.js: $_"
@@ -175,7 +164,7 @@ if (-not $SkipNodeCheck) {
         Log-Err "npm not found after Node.js install"
         exit 1
     }
-    $npmVersion = Invoke-Inline { npm --version } "npm --version"
+    $npmVersion = npm --version 2>&1
     Log-Ok "npm $npmVersion"
 } else {
     Log-Info "SKIPPED"
@@ -203,7 +192,7 @@ try {
         Log-Info "Use -Update to download latest version."
     } else {
         Log-Info "URL: $RepoUrl"
-        Invoke-Inline { Invoke-WebRequest -Uri $RepoUrl -OutFile $ZipFile -UseBasicParsing } "Download SAM"
+        Invoke-WebRequest -Uri $RepoUrl -OutFile $ZipFile -UseBasicParsing
 
         if (-not (Test-Path $ZipFile)) {
             Log-Err "Download failed"
@@ -334,18 +323,11 @@ NEXTAUTH_URL="http://localhost:$Port"
 Log-Info "Database: $dataDir\sam.db"
 
 # ─── Step 6: npm install ─────────────────────────────────────────
-Log-Step 6 12 "Installing dependencies (this may take a minute)..."
+Log-Step 6 12 "Installing dependencies..."
 if (-not $Update -or -not (Test-Path "node_modules")) {
-    # PowerShell 5.1 treats native stderr (npm warnings) as errors.
-    # Temporarily switch ErrorAction to Continue so warnings don't abort install.
-    $prevErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    & npm install --legacy-peer-deps 2>&1 | Out-Null
-    $npmExit = $LASTEXITCODE
-    $ErrorActionPreference = $prevErrorAction
-
-    if ($npmExit -ne 0) {
-        Log-Err "npm install failed (exit code $npmExit)"
+    & npm install --legacy-peer-deps 2>&1 | ForEach-Object { Log-Info $_.ToString() }
+    if ($LASTEXITCODE -ne 0) {
+        Log-Err "npm install failed (exit code $LASTEXITCODE)"
         exit 1
     }
     Log-Ok "Dependencies installed"
@@ -360,25 +342,18 @@ if (-not $Update -or -not (Test-Path "node_modules")) {
 
 # ─── Step 7: Prisma generate ──────────────────────────────────────
 Log-Step 7 12 "Generating Prisma client..."
-$prevErrorAction = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-& npx prisma generate 2>&1 | Out-Null
-$prismaExit = $LASTEXITCODE
-$ErrorActionPreference = $prevErrorAction
-if ($prismaExit -ne 0) {
-    Log-Err "Prisma generate failed (exit code $prismaExit)"
+& npx prisma generate 2>&1 | ForEach-Object { Log-Info $_.ToString() }
+if ($LASTEXITCODE -ne 0) {
+    Log-Err "Prisma generate failed (exit code $LASTEXITCODE)"
     exit 1
 }
 Log-Ok "Prisma client generated"
 
 # ─── Step 8: Create database ─────────────────────────────────────
 Log-Step 8 12 "Creating SQLite database..."
-$ErrorActionPreference = "Continue"
-& npx prisma db push 2>&1 | Out-Null
-$dbExit = $LASTEXITCODE
-$ErrorActionPreference = $prevErrorAction
-if ($dbExit -ne 0) {
-    Log-Err "Database creation failed (exit code $dbExit)"
+& npx prisma db push 2>&1 | ForEach-Object { Log-Info $_.ToString() }
+if ($LASTEXITCODE -ne 0) {
+    Log-Err "Database creation failed (exit code $LASTEXITCODE)"
     exit 1
 }
 Log-Ok "Database created"
@@ -387,11 +362,8 @@ Log-Ok "Database created"
 Log-Step 9 12 "Seeding test data..."
 if (Test-Path "scripts/seed.js") {
     if (-not (Test-Path "$dataDir\sam.db") -or (Get-Item "$dataDir\sam.db").Length -lt 1024) {
-        $ErrorActionPreference = "Continue"
-        & node scripts/seed.js 2>&1 | Out-Null
-        $seedExit = $LASTEXITCODE
-        $ErrorActionPreference = "Continue"
-        if ($seedExit -ne 0) { Log-Warn "Seeding had warnings, continuing..." }
+        & node scripts/seed.js 2>&1 | ForEach-Object { Log-Info $_.ToString() }
+        if ($LASTEXITCODE -ne 0) { Log-Warn "Seeding had warnings, continuing..." }
         else { Log-Ok "Database seeded" }
     } else {
         Log-Info "Database already has data, skipping seed"
@@ -400,12 +372,9 @@ if (Test-Path "scripts/seed.js") {
 
 # ─── Step 10: Build ───────────────────────────────────────────────
 Log-Step 10 12 "Building application..."
-$ErrorActionPreference = "Continue"
-& npm run build 2>&1 | Out-Null
-$buildExit = $LASTEXITCODE
-$ErrorActionPreference = "prevErrorAction"
-if ($buildExit -ne 0) {
-    Log-Err "Build failed (exit code $buildExit)"
+& npm run build 2>&1 | ForEach-Object { Log-Info $_.ToString() }
+if ($LASTEXITCODE -ne 0) {
+    Log-Err "Build failed (exit code $LASTEXITCODE)"
     exit 1
 }
 Log-Ok "Build complete"
@@ -466,22 +435,21 @@ if ($SetupService) {
         $nodeExe = (Get-Command node).Source
 
         # Remove existing service
-        Invoke-Inline { nssm stop $serviceName } "nssm stop"
-        Invoke-Inline { nssm remove $serviceName confirm } "nssm remove"
+        nssm stop $serviceName 2>&1 | Out-Null
+        nssm remove $serviceName confirm 2>&1 | Out-Null
 
         # Install service
-        Invoke-Inline { nssm install $serviceName $nodeExe "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" "start" "--prefix" $InstallDir } "nssm install"
-        Invoke-Inline { nssm set $serviceName AppDirectory $InstallDir } "nssm set AppDirectory"
-        Invoke-Inline { nssm set $serviceName AppEnvironmentExtra DATABASE_URL=$dbPath NEXTAUTH_SECRET=*** NEXTAUTH_URL="http://localhost:$Port" } "nssm set AppEnvironmentExtra"
-        Invoke-Inline { nssm set $serviceName DisplayName "SAM - Software Asset Management" } "nssm set DisplayName"
-        Invoke-Inline { nssm set $serviceName Description "Software Asset Management web application" } "nssm set Description"
-        Invoke-Inline { nssm set $serviceName Start SERVICE_AUTO_START } "nssm set Start"
+        nssm install $serviceName $nodeExe "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" "start" "--prefix" $InstallDir 2>&1 | Out-Null
+        nssm set $serviceName AppDirectory $InstallDir 2>&1 | Out-Null
+        nssm set $serviceName DisplayName "SAM - Software Asset Management" 2>&1 | Out-Null
+        nssm set $serviceName Description "Software Asset Management web application" 2>&1 | Out-Null
+        nssm set $serviceName Start SERVICE_AUTO_START 2>&1 | Out-Null
 
         # Logs
         $logsDir = Join-Path $InstallDir "logs"
         if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
-        Invoke-Inline { nssm set $serviceName AppStdout "$logsDir\service-stdout.log" } "nssm set AppStdout"
-        Invoke-Inline { nssm set $serviceName AppStderr "$logsDir\service-stderr.log" } "nssm set AppStderr"
+        nssm set $serviceName AppStdout "$logsDir\service-stdout.log" 2>&1 | Out-Null
+        nssm set $serviceName AppStderr "$logsDir\service-stderr.log" 2>&1 | Out-Null
 
         Log-Ok "Windows Service '$serviceName' registered"
         Log-Info "Start: net start $serviceName"
