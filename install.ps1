@@ -43,7 +43,8 @@ $logFile   = Join-Path $logDir "install.log"
 function Write-Log {
     param([string]$Message)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $logFile -Value "[$timestamp] $Message" -Encoding UTF8
+    $logFilePath = Join-Path $logDir "install.log"
+    Add-Content -Path $logFilePath -Value "[$timestamp] $Message" -Encoding UTF8
 }
 
 function Log-Step {
