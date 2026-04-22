@@ -1,6 +1,6 @@
 # SAM - Software Asset Management
 
-IT Asset Management System for Windows Server 2019.
+IT Asset Management System for Windows Server 2019+.
 
 ## Features
 
@@ -11,14 +11,14 @@ IT Asset Management System for Windows Server 2019.
 - **Dashboard** — Overview with charts and compliance metrics
 - **Alerts** — Automated alerts for expiring licenses and compliance issues
 - **Reports** — Export reports (CSV/JSON)
-- **Import/Export** — Bulk import from CSV
+- **Import/Export** — Bulk import from CSV, full DB export/restore
 
 ## Tech Stack
 
 - **Frontend:** Next.js 14, React, Tailwind CSS, shadcn/ui
 - **Backend:** Next.js API Routes
 - **Database:** SQLite (via Prisma ORM)
-- **Auth:** NextAuth.js (JWT)
+- **Auth:** NextAuth.js (JWT) + Custom JWT fallback
 
 ## Quick Install
 
@@ -109,6 +109,23 @@ nssm stop SAM
 nssm restart SAM
 ```
 
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/software` | GET, POST, PUT | Software inventory CRUD |
+| `/api/software/[id]` | GET, DELETE | Single software item |
+| `/api/licenses` | GET, POST | License management |
+| `/api/vendors` | GET, POST, PUT | Vendor management |
+| `/api/costs` | GET, POST | Cost tracking |
+| `/api/alerts` | GET, POST, PATCH | Compliance alerts |
+| `/api/dashboard/stats` | GET | Dashboard statistics |
+| `/api/dashboard/compliance` | GET | Compliance overview |
+| `/api/export` | GET | Full DB export (JSON) |
+| `/api/import` | POST | Import from SAM export |
+| `/api/login` | POST | Custom JWT login |
+| `/api/signup` | POST | User registration |
+
 ## Installation Log
 
 The installer writes detailed logs to `C:\SAM\logs\install.log`:
@@ -133,13 +150,25 @@ C:\SAM\
 ├── components/             # React components
 ├── lib/                    # Utilities, auth, database
 ├── prisma/                 # Database schema (SQLite)
+│   └── data/               # SQLite database files
 ├── scripts/                # Seed & utility scripts
-├── data/                   # SQLite database files
 ├── logs/                   # Installation log and service logs
 ├── install.ps1             # Automated installer
 ├── start.ps1               # Start script
 └── stop.ps1                # Stop script
 ```
+
+## Database Schema
+
+- **User** — Accounts (email, password, role)
+- **Vendor** — Software vendors (contacts, contracts)
+- **Software** — Software assets (60+ metadata fields)
+- **License** — License tracking (seats, expiry, compliance)
+- **Contract** — Vendor contracts (value, dates, terms)
+- **SoftwareCost** — Cost entries (billing, department, category)
+- **Budget** — Department budgets (fiscal year tracking)
+- **ComplianceAlert** — Alerts (severity, resolved status)
+- **SoftwareAssignment** — User-to-software assignments
 
 ## System Requirements
 
@@ -148,6 +177,16 @@ C:\SAM\
 - Node.js 18+ (auto-installed if missing)
 - 2 GB RAM minimum
 - Port 3000 (configurable)
+
+## Backup
+
+```powershell
+# Manual backup
+copy C:\SAM\data\sam.db C:\SAM\data\sam-backup-$(Get-Date -Format yyyyMMdd).db
+
+# Automatic backup (add to Task Scheduler)
+# See ROADMAP.md for planned automatic backup feature
+```
 
 ## Troubleshooting
 
@@ -165,7 +204,7 @@ C:\SAM\
 cd C:\SAM
 del data\sam.db
 npx prisma db push
-npm run seed
+npm run db:seed
 ```
 
 ### Build issues
@@ -186,6 +225,38 @@ netstat -ano | findstr :3000
 # Kill process (if needed)
 .\stop.ps1
 ```
+
+## Security Notes
+
+- Change the default password after first login
+- Generate a strong `NEXTAUTH_SECRET` for production
+- The custom login route (`/api/login`) is deprecated — use NextAuth.js
+- See `SECURITY.md` for detailed security guidance
+
+## Development
+
+```powershell
+# Dev mode with hot reload
+cd C:\SAM
+npm run dev
+
+# Build for production
+npm run build
+
+# Database changes
+npx prisma db push        # Apply schema changes
+npm run db:seed           # Seed test data
+```
+
+## Documentation
+
+- [ROADMAP.md](ROADMAP.md) — Improvement suggestions & planned features
+- [CHANGELOG.md](CHANGELOG.md) — Version history
+- [SECURITY.md](SECURITY.md) — Security guidance & hardening
+
+## Version
+
+Current: **v4.5.0**
 
 ## Support
 
