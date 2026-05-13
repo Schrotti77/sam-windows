@@ -29,6 +29,9 @@ interface Software {
   name: string
   category: string
   activeUsers?: number
+  _count?: {
+    assignments?: number
+  }
 }
 
 interface License {
@@ -103,7 +106,10 @@ export default function ReportsPageClient() {
       const softwareResponse = await fetch('/api/software')
       if (softwareResponse.ok) {
         const software = await softwareResponse.json()
-        setSoftwareData(Array.isArray(software) ? software : [])
+        setSoftwareData(Array.isArray(software) ? software.map((sw) => ({
+          ...sw,
+          activeUsers: sw.activeUsers ?? sw._count?.assignments ?? 0
+        })) : [])
       }
 
       // Fetch license data

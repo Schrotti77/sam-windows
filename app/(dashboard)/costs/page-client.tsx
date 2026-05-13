@@ -228,7 +228,7 @@ export default function CostsPageClient() {
   const totalCosts = filteredCosts.reduce((sum, cost) => sum + cost.amount, 0)
   const monthlyCosts = filteredCosts.filter(cost => cost.billingPeriod === 'MONTHLY')
   const annuallyCosts = filteredCosts.filter(cost => cost.billingPeriod === 'ANNUALLY')
-  const avgCostPerEntry = costs.length > 0 ? totalCosts / filteredCosts.length : 0
+  const avgCostPerEntry = filteredCosts.length > 0 ? totalCosts / filteredCosts.length : 0
 
   const handleExport = () => {
     if (filteredCosts.length === 0) {

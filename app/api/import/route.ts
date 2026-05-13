@@ -314,16 +314,21 @@ export async function POST(request: Request) {
           }
 
           // Convert dates
+          let skipContract = false
           for (const f of ['startDate', 'endDate', 'renewalDate']) {
-            if (cleaned[f]) cleaned[f] = toDate(cleaned[f])
-            else if (f !== 'renewalDate') {
+            if (cleaned[f]) {
+              cleaned[f] = toDate(cleaned[f])
+            } else if (f !== 'renewalDate') {
               // startDate and endDate are required
               results.contracts.skipped++
-              continue
+              results.contracts.errorMessages.push(`${cleaned.contractNumber || contract.id || 'Contract'}: ${f} is required`)
+              skipContract = true
+              break
             } else {
               cleaned[f] = null
             }
           }
+          if (skipContract) continue
           if (cleaned.contractValue) cleaned.contractValue = parseFloat(String(cleaned.contractValue))
 
           const { id, ...contractData } = cleaned

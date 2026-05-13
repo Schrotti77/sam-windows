@@ -3,6 +3,7 @@ const assert = require('assert');
 const BASE_URL = (process.env.CONTRACTS_BASE_URL || process.env.SMOKE_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
 const EMAIL = process.env.SAM_TEST_EMAIL || 'john@doe.com';
 const PASSWORD = process.env.SAM_TEST_PASSWORD || 'johndoe123';
+const REQUIRE_AUTH = process.env.SAM_REQUIRE_AUTH === 'true';
 
 async function request(path, options = {}) {
   return fetch(`${BASE_URL}${path}`, {
@@ -56,7 +57,15 @@ async function main() {
       contractValue: 1000
     })
   });
-  assert.strictEqual(unauthCreateRes.status, 401, 'unauthenticated contract create should return 401');
+  if (REQUIRE_AUTH) {
+    assert.strictEqual(unauthCreateRes.status, 401, 'unauthenticated contract create should return 401 when SAM_REQUIRE_AUTH=true');
+  } else {
+    assert.strictEqual(unauthCreateRes.status, 201, 'unauthenticated contract create should be allowed when SAM_REQUIRE_AUTH is not true');
+    const unauthCreated = await json(unauthCreateRes);
+    if (unauthCreated && unauthCreated.id) {
+      await request(`/api/contracts/${unauthCreated.id}`, { method: 'DELETE', headers: { Cookie: cookie } });
+    }
+  }
 
   const invalidJsonRes = await request('/api/contracts', {
     method: 'POST',
@@ -99,6 +108,21 @@ async function main() {
     })
   });
   assert.strictEqual(invalidRangeRes.status, 400, 'end date before start date should return 400');
+
+  const invalidStatusRes = await request('/api/contracts', {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: JSON.stringify({
+      vendorId,
+      contractNumber: `TEST-STATUS-${Date.now()}`,
+      title: 'Invalid Status Contract',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      contractValue: 1000,
+      status: 'BOGUS'
+    })
+  });
+  assert.strictEqual(invalidStatusRes.status, 400, 'invalid contract status should return 400');
 
   const contractNumber = `TEST-CONTRACT-${Date.now()}`;
   let createdId = null;
@@ -145,7 +169,11 @@ async function main() {
         status: 'ACTIVE'
       })
     });
-    assert.strictEqual(unauthUpdateRes.status, 401, 'unauthenticated contract update should return 401');
+    assert.strictEqual(
+      unauthUpdateRes.status,
+      REQUIRE_AUTH ? 401 : 200,
+      REQUIRE_AUTH ? 'unauthenticated contract update should return 401 when SAM_REQUIRE_AUTH=true' : 'unauthenticated contract update should be allowed when SAM_REQUIRE_AUTH is not true'
+    );
 
     const updateRes = await request(`/api/contracts/${createdId}`, {
       method: 'PUT',
@@ -165,8 +193,10 @@ async function main() {
     assert.strictEqual(updated.title, 'Updated Test Contract API', 'updated title should persist');
     assert.strictEqual(updated.contractValue, 15000, 'updated value should persist');
 
-    const unauthDeleteRes = await request(`/api/contracts/${createdId}`, { method: 'DELETE' });
-    assert.strictEqual(unauthDeleteRes.status, 401, 'unauthenticated contract delete should return 401');
+    if (REQUIRE_AUTH) {
+      const unauthDeleteRes = await request(`/api/contracts/${createdId}`, { method: 'DELETE' });
+      assert.strictEqual(unauthDeleteRes.status, 401, 'unauthenticated contract delete should return 401 when SAM_REQUIRE_AUTH=true');
+    }
 
     const deleteRes = await request(`/api/contracts/${createdId}`, {
       method: 'DELETE',

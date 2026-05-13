@@ -20,6 +20,20 @@ function optionalString(value: unknown): string | null {
   return value.trim()
 }
 
+const CONTRACT_STATUSES = new Set(['ACTIVE', 'PENDING', 'EXPIRED', 'TERMINATED'])
+
+function parseStatus(value: unknown): string {
+  const status = value === undefined || value === null || value === ''
+    ? 'ACTIVE'
+    : requiredString(value, 'Status').toUpperCase()
+
+  if (!CONTRACT_STATUSES.has(status)) {
+    throw new InputValidationError('Status must be one of ACTIVE, PENDING, EXPIRED, or TERMINATED')
+  }
+
+  return status
+}
+
 export function parseContractPayload(body: any) {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new InputValidationError('Request body must be an object')
@@ -42,7 +56,7 @@ export function parseContractPayload(body: any) {
     contractValue: parseRequiredNumber(body.contractValue, 'Contract value', { min: 0 }),
     paymentTerms: optionalString(body.paymentTerms),
     renewalTerms: optionalString(body.renewalTerms),
-    status: optionalString(body.status) || 'ACTIVE',
+    status: parseStatus(body.status),
     notes: optionalString(body.notes)
   }
 }

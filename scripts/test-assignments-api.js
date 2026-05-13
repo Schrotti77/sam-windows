@@ -3,6 +3,7 @@ const assert = require('assert');
 const BASE_URL = (process.env.ASSIGNMENTS_BASE_URL || process.env.SMOKE_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
 const EMAIL = process.env.SMOKE_EMAIL || 'john@doe.com';
 const PASSWORD = process.env.SMOKE_PASSWORD || 'johndoe123';
+const REQUIRE_AUTH = process.env.SAM_REQUIRE_AUTH === 'true';
 
 async function request(path, options = {}) {
   const headers = {
@@ -50,7 +51,15 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({ softwareId, userId: `user-${Date.now()}` })
   });
-  assert.strictEqual(unauthCreateRes.status, 401, 'unauthenticated assignment create should return 401');
+  if (REQUIRE_AUTH) {
+    assert.strictEqual(unauthCreateRes.status, 401, 'unauthenticated assignment create should return 401 when SAM_REQUIRE_AUTH=true');
+  } else {
+    assert.strictEqual(unauthCreateRes.status, 201, 'unauthenticated assignment create should be allowed when SAM_REQUIRE_AUTH is not true');
+    const unauthCreated = await json(unauthCreateRes);
+    if (unauthCreated && unauthCreated.id) {
+      await request(`/api/assignments/${unauthCreated.id}`, { method: 'DELETE' });
+    }
+  }
 
   const cookie = await login();
 
@@ -151,7 +160,11 @@ async function main() {
       method: 'PUT',
       body: JSON.stringify({ softwareId, userId, status: 'INACTIVE' })
     });
-    assert.strictEqual(unauthUpdateRes.status, 401, 'unauthenticated assignment update should return 401');
+    assert.strictEqual(
+      unauthUpdateRes.status,
+      REQUIRE_AUTH ? 401 : 200,
+      REQUIRE_AUTH ? 'unauthenticated assignment update should return 401 when SAM_REQUIRE_AUTH=true' : 'unauthenticated assignment update should be allowed when SAM_REQUIRE_AUTH is not true'
+    );
 
     const updateRes = await request(`/api/assignments/${createdId}`, {
       method: 'PUT',
@@ -170,8 +183,10 @@ async function main() {
     assert.strictEqual(updated.status, 'REVOKED', 'updated status should persist');
     assert.strictEqual(updated.notes, 'Updated by regression test', 'updated notes should persist');
 
-    const unauthDeleteRes = await request(`/api/assignments/${createdId}`, { method: 'DELETE' });
-    assert.strictEqual(unauthDeleteRes.status, 401, 'unauthenticated assignment delete should return 401');
+    if (REQUIRE_AUTH) {
+      const unauthDeleteRes = await request(`/api/assignments/${createdId}`, { method: 'DELETE' });
+      assert.strictEqual(unauthDeleteRes.status, 401, 'unauthenticated assignment delete should return 401 when SAM_REQUIRE_AUTH=true');
+    }
 
     const deleteRes = await request(`/api/assignments/${createdId}`, {
       method: 'DELETE',

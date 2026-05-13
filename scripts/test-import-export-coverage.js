@@ -60,6 +60,39 @@ async function main() {
     assert.strictEqual(imported.results[key].imported, 0, `empty import should import zero ${key}`);
   }
 
+  const vendorsRes = await request('/api/vendors');
+  assert.strictEqual(vendorsRes.status, 200, 'vendors list should load for contract import test');
+  const vendors = await json(vendorsRes);
+  assert(Array.isArray(vendors) && vendors[0]?.id, 'vendor seed data should exist for contract import test');
+
+  const invalidContractImport = {
+    version: exported.version || '3.1',
+    exportedAt: new Date().toISOString(),
+    data: {
+      ...Object.fromEntries(expectedKeys.map((key) => [key, []])),
+      contracts: [{
+        id: `import-missing-date-${Date.now()}`,
+        vendorId: vendors[0].id,
+        contractNumber: `IMPORT-MISSING-DATE-${Date.now()}`,
+        title: 'Import Missing Date Contract',
+        endDate: '2026-12-31',
+        contractValue: 1000
+      }]
+    }
+  };
+
+  const invalidContractImportRes = await request('/api/import', {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: JSON.stringify(invalidContractImport)
+  });
+  assert.strictEqual(invalidContractImportRes.status, 200, 'partial invalid contract import should return a structured result');
+  const invalidContractImportResult = await json(invalidContractImportRes);
+  assert.strictEqual(invalidContractImportResult.results.contracts.imported, 0, 'contract missing startDate should not import');
+  assert.strictEqual(invalidContractImportResult.results.contracts.skipped, 1, 'contract missing startDate should be skipped');
+  assert.strictEqual(invalidContractImportResult.results.contracts.errors, 0, 'contract missing startDate should not fall through to a Prisma error');
+  assert(invalidContractImportResult.results.contracts.errorMessages.some((message) => message.includes('startDate is required')), 'contract skip should include a useful reason');
+
   const softwareRes = await request('/api/software');
   assert.strictEqual(softwareRes.status, 200, 'software list should load for assignment import test');
   const software = await json(softwareRes);

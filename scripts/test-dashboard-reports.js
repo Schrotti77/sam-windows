@@ -65,6 +65,14 @@ function assertConsumersHandleWrappedPayloads() {
     files.reportsPage.includes('`/api/dashboard/costs?months=${months}`'),
     'reports page should pass the selected month range to the cost chart API'
   );
+  assert(
+    files.reportsPage.includes('activeUsers: sw.activeUsers ?? sw._count?.assignments ?? 0'),
+    'reports page should derive activeUsers from software assignment counts'
+  );
+  assert(
+    files.costsPage.includes('filteredCosts.length > 0 ? totalCosts / filteredCosts.length : 0'),
+    'costs page should not divide by zero when filters return no rows'
+  );
 }
 
 async function main() {

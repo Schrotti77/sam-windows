@@ -34,7 +34,10 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json(software)
+    return NextResponse.json(software.map((item) => ({
+      ...item,
+      activeUsers: item._count.assignments
+    })))
 
   } catch (error) {
     console.error('Software API error:', error)
