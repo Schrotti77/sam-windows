@@ -86,6 +86,32 @@ function Test-Command {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Ensure-SqliteWritable {
+    param([string]$DataDir)
+
+    # SQLite needs write access to the DB file and to the containing directory
+    # for journal/WAL files. Updates/backups can preserve a ReadOnly bit or ACLs
+    # from an elevated install, which Prisma reports as "attempt to write a readonly database".
+    if (-not (Test-Path $DataDir)) {
+        New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
+    }
+
+    try {
+        icacls $DataDir /grant "*S-1-5-11:(OI)(CI)M" /T /Q 2>$null | Out-Null
+    } catch {
+        Log-Warn "Could not update data directory ACLs: $_"
+    }
+
+    Get-ChildItem $DataDir -Filter "sam.db*" -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $_.Attributes = $_.Attributes -band (-bnot [IO.FileAttributes]::ReadOnly)
+            icacls $_.FullName /grant "*S-1-5-11:M" /Q 2>$null | Out-Null
+        } catch {
+            Log-Warn "Could not make $($_.FullName) writable: $_"
+        }
+    }
+}
+
 function Stop-SamRunningProcesses {
     param(
         [string]$Reason = "update"
@@ -315,9 +341,7 @@ if ($Update) {
 # ─── Step 4: Data directory ───────────────────────────────────────
 Log-Step 4 12 "Setting up data directory..."
 $dataDir = Join-Path $InstallDir "data"
-if (-not (Test-Path $dataDir)) {
-    New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
-}
+Ensure-SqliteWritable -DataDir $dataDir
 Log-Ok "Data directory: $dataDir"
 
 # ─── Step 5: .env file ───────────────────────────────────────────
@@ -404,6 +428,7 @@ Log-Step 8 12 "Creating SQLite database..."
 try {
     & npx prisma db push 2>&1 | ForEach-Object { Log-Info "$_" }
     if ($LASTEXITCODE -ne 0) { throw "db push failed" }
+    Ensure-SqliteWritable -DataDir $dataDir
     Log-Ok "Database created"
 } catch {
     Log-Err "Database creation failed: $_"

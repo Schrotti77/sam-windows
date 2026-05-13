@@ -38,6 +38,15 @@ $dataDir = Join-Path $samDir "data"
 if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 }
+try {
+    icacls $dataDir /grant "*S-1-5-11:(OI)(CI)M" /T /Q 2>$null | Out-Null
+    Get-ChildItem $dataDir -Filter "sam.db*" -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        $_.Attributes = $_.Attributes -band (-bnot [IO.FileAttributes]::ReadOnly)
+        icacls $_.FullName /grant "*S-1-5-11:M" /Q 2>$null | Out-Null
+    }
+} catch {
+    Write-Host "WARN: Could not verify SQLite write permissions: $_" -ForegroundColor Yellow
+}
 
 # Ensure .env exists
 if (-not (Test-Path ".env")) {
