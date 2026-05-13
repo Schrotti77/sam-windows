@@ -6,6 +6,7 @@ export interface AuthUser {
   email: string
   name: string
   role: string
+  token?: string
 }
 
 const AUTH_KEY = 'sam_auth_user'
@@ -14,6 +15,11 @@ export function saveAuth(user: AuthUser): void {
   if (typeof window === 'undefined') return
   try {
     sessionStorage.setItem(AUTH_KEY, JSON.stringify(user))
+    if (user.token) {
+      // Internal Windows deployments may run on hostnames like http://desap10:3000.
+      // Keep a readable same-site JWT cookie as a compatibility fallback for API calls.
+      document.cookie = `auth-token=${user.token}; path=/; max-age=${7 * 24 * 60 * 60}; samesite=lax`
+    }
   } catch (error) {
     console.error('Failed to save auth:', error)
   }

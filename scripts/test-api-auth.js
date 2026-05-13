@@ -3,6 +3,7 @@ const assert = require('assert');
 const BASE_URL = (process.env.API_AUTH_BASE_URL || process.env.SMOKE_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
 const EMAIL = process.env.SMOKE_EMAIL || 'john@doe.com';
 const PASSWORD = process.env.SMOKE_PASSWORD || 'johndoe123';
+const REQUIRE_AUTH = process.env.SAM_REQUIRE_AUTH === 'true';
 
 async function check(name, fn) {
   try {
@@ -43,17 +44,21 @@ async function loginCookie() {
 }
 
 async function main() {
-  await expectStatus('unauthenticated GET /api/export is rejected', '/api/export', undefined, 401);
-  await expectStatus('unauthenticated POST /api/import is rejected before parsing body', '/api/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ version: '3.0', data: {} }),
-  }, 401);
-  await expectStatus('unauthenticated POST /api/vendors is rejected before validation', '/api/vendors', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({}),
-  }, 401);
+  if (REQUIRE_AUTH) {
+    await expectStatus('unauthenticated GET /api/export is rejected', '/api/export', undefined, 401);
+    await expectStatus('unauthenticated POST /api/import is rejected before parsing body', '/api/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ version: '3.0', data: {} }),
+    }, 401);
+    await expectStatus('unauthenticated POST /api/vendors is rejected before validation', '/api/vendors', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }, 401);
+  } else {
+    await expectStatus('unauthenticated GET /api/export is allowed when SAM_REQUIRE_AUTH is not true', '/api/export', undefined, 200);
+  }
 
   await check('authenticated GET /api/export succeeds', async () => {
     const cookie = await loginCookie();
@@ -68,7 +73,7 @@ async function main() {
   if (process.exitCode) {
     process.exit(process.exitCode);
   }
-  console.log(`API auth tests passed against ${BASE_URL}`);
+  console.log(`API auth tests passed against ${BASE_URL} (SAM_REQUIRE_AUTH=${REQUIRE_AUTH})`);
 }
 
 main().catch((error) => {

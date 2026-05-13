@@ -10,7 +10,7 @@
 
     Default install location: C:\SAM
 .NOTES
-    Version: 4.5.3
+    Version: 4.5.5
     Requires: PowerShell 5.1+ (Windows Server 2019 default)
     Run as: Administrator
     All commands run inline with iex for better error handling

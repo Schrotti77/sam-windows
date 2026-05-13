@@ -44,7 +44,8 @@ export default function LoginPageClient() {
           userId: data.user.id,
           email: data.user.email,
           name: data.user.name,
-          role: data.user.role
+          role: data.user.role,
+          token: data.token
         }
         saveAuth(authUser)
         

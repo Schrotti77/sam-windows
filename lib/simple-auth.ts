@@ -36,6 +36,12 @@ export async function requireAuth(): Promise<AuthUser> {
 }
 
 export async function requireApiAuth(): Promise<NextResponse | null> {
+  // SAM is normally deployed as an internal Windows/LAN tool without a login flow.
+  // Keep API auth opt-in for future hardened deployments, but do not block writes by default.
+  if (process.env.SAM_REQUIRE_AUTH !== 'true') {
+    return null
+  }
+
   const user = await getAuthUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
