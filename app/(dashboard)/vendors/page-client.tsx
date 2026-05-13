@@ -209,10 +209,6 @@ export default function VendorsPageClient() {
     setDeletingVendor(null)
   }
 
-  const handleFilter = () => {
-    alert('Filter dialog would open')
-  }
-
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>
   }
@@ -291,9 +287,9 @@ export default function VendorsPageClient() {
             className="pl-4"
           />
         </div>
-        <Button variant="outline" onClick={handleFilter}>
+        <Button variant="outline" disabled title="Filter is not available yet">
           <Filter className="w-4 h-4 mr-2" />
-          Filter
+          Filter is not available yet
         </Button>
       </div>
 

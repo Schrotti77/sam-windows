@@ -2,6 +2,13 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
+import {
+  isInputValidationError,
+  parseRequiredDate,
+  parseRequiredNumber,
+  validationErrorResponse
+} from '@/lib/api-validation'
 
 
 // GET single cost entry
@@ -47,6 +54,8 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
   try {
     const existingCost = await prisma.softwareCost.findUnique({
       where: { id: params.id }
@@ -71,22 +80,25 @@ export async function PUT(
       department
     } = await request.json()
 
-    if (!softwareId || !costType || !amount || !billingPeriod || !costDate) {
+    if (!softwareId || !costType || !billingPeriod || !costDate) {
       return NextResponse.json(
         { error: 'All required fields must be filled' },
         { status: 400 }
       )
     }
 
+    const parsedAmount = parseRequiredNumber(amount, 'Amount', { min: 0 })
+    const parsedCostDate = parseRequiredDate(costDate, 'Cost date')
+
     const cost = await prisma.softwareCost.update({
       where: { id: params.id },
       data: {
         softwareId,
         costType,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         currency: currency || 'EUR',
         billingPeriod,
-        costDate: new Date(costDate),
+        costDate: parsedCostDate,
         description,
         category,
         department
@@ -106,6 +118,10 @@ export async function PUT(
 
     return NextResponse.json(cost)
   } catch (error) {
+    if (isInputValidationError(error)) {
+      return validationErrorResponse(error)
+    }
+
     console.error('Cost UPDATE error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -119,6 +135,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
   try {
     const existingCost = await prisma.softwareCost.findUnique({
       where: { id: params.id }

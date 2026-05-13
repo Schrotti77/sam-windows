@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
 
 
 export async function GET() {
@@ -27,6 +28,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
+
   try {
     const { 
       title,
@@ -68,6 +72,9 @@ export async function POST(request: Request) {
 
 // PATCH - Bulk resolve all unresolved alerts
 export async function PATCH() {
+  const authError = await requireApiAuth()
+  if (authError) return authError
+
   try {
     const result = await prisma.complianceAlert.updateMany({
       where: { isResolved: false },

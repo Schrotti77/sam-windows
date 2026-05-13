@@ -1,6 +1,7 @@
 
 import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
 
 export interface AuthUser {
   userId: string
@@ -32,4 +33,12 @@ export async function requireAuth(): Promise<AuthUser> {
     throw new Error('Unauthorized')
   }
   return user
+}
+
+export async function requireApiAuth(): Promise<NextResponse | null> {
+  const user = await getAuthUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return null
 }

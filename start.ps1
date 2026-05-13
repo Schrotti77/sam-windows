@@ -58,7 +58,11 @@ if (-not (Test-Path "node_modules")) {
 # Check .next build (production only)
 if ((-not $Dev) -and (-not (Test-Path ".next"))) {
     Write-Host "Building application..." -ForegroundColor Yellow
-    & npm run build
+    if (Test-Path ".\build.cmd") {
+        & cmd.exe /c ".\build.cmd"
+    } else {
+        & npm run build
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Build failed" -ForegroundColor Red
         exit 1

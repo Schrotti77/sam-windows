@@ -28,48 +28,13 @@ export default function SettingsPageClient() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+  const [twoFactorEnabled] = useState(false)
 
   // System settings state
   const [currency, setCurrency] = useState('EUR')
   const [timezone, setTimezone] = useState('Europe/Berlin')
   const [autoBackup, setAutoBackup] = useState(true)
   const [dataRetention, setDataRetention] = useState('24')
-
-  const handleSaveProfile = () => {
-    if (!firstName || !lastName || !email) {
-      toast.error('Please fill in all profile fields')
-      return
-    }
-    toast.success('Profile saved successfully')
-  }
-
-  const handleSaveNotifications = () => {
-    toast.success('Notification settings saved')
-  }
-
-  const handleChangePassword = () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.error('Please fill in all password fields')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match')
-      return
-    }
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters')
-      return
-    }
-    toast.success('Password changed successfully')
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmPassword('')
-  }
-
-  const handleSaveSystemSettings = () => {
-    toast.success('System settings saved')
-  }
 
   // Export/Import state
   const [exporting, setExporting] = useState(false)
@@ -94,7 +59,8 @@ export default function SettingsPageClient() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       
-      toast.success(`Export successful! ${data.counts.vendors} vendors, ${data.counts.software} software, ${data.counts.licenses} licenses, ${data.counts.costs} costs exported.`)
+      const totalRecords = Object.values(data.counts || {}).reduce<number>((sum, count) => sum + (Number(count) || 0), 0)
+      toast.success(`Export successful! ${totalRecords} records exported.`)
     } catch (error) {
       toast.error('Export failed')
       console.error('Export error:', error)
@@ -205,7 +171,10 @@ export default function SettingsPageClient() {
                 <span className="text-sm text-muted-foreground">Full Access</span>
               </div>
             </div>
-            <Button onClick={handleSaveProfile}>
+            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Profile saving is not implemented yet. Changes on this card are not persisted.
+            </div>
+            <Button disabled>
               <Save className="w-4 h-4 mr-2" />
               Save Profile
             </Button>
@@ -275,7 +244,10 @@ export default function SettingsPageClient() {
                 onCheckedChange={setWeeklyReports}
               />
             </div>
-            <Button onClick={handleSaveNotifications}>
+            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Notification preferences are not persisted yet. Toggle values are local-only.
+            </div>
+            <Button disabled>
               <Save className="w-4 h-4 mr-2" />
               Save Notifications
             </Button>
@@ -316,7 +288,10 @@ export default function SettingsPageClient() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
               </div>
-              <Button onClick={handleChangePassword} className="mt-2">
+              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                Password changes are not implemented yet. Use database/admin tooling until this API exists.
+              </div>
+              <Button disabled className="mt-2">
                 Change Password
               </Button>
             </div>
@@ -330,8 +305,11 @@ export default function SettingsPageClient() {
               </div>
               <Switch 
                 checked={twoFactorEnabled} 
-                onCheckedChange={setTwoFactorEnabled}
+                disabled
               />
+            </div>
+            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Two-factor authentication is not implemented yet.
             </div>
           </CardContent>
         </Card>
@@ -405,7 +383,10 @@ export default function SettingsPageClient() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={handleSaveSystemSettings}>
+            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              System settings are not persisted yet. Current selections are display-only.
+            </div>
+            <Button disabled>
               <Save className="w-4 h-4 mr-2" />
               Save System Settings
             </Button>
@@ -429,7 +410,7 @@ export default function SettingsPageClient() {
               <div>
                 <Label className="text-base font-semibold">Export All Data</Label>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Download all vendors, software, licenses, costs, alerts, and contracts as a JSON file.
+                  Download all vendors, software, licenses, costs, alerts, contracts, budgets, assignments, and users as a JSON file.
                 </p>
               </div>
               <Button onClick={handleExport} disabled={exporting}>

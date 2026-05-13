@@ -1,9 +1,7 @@
 export const dynamic = 'force-dynamic'
 
-
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-
 
 export async function GET() {
   try {
@@ -19,16 +17,16 @@ export async function GET() {
       value: stat._count.complianceStatus
     }))
 
-    if (result.length === 0) {
-      return NextResponse.json([
-        { name: 'Compliant', value: 0 },
-        { name: 'Non-Compliant', value: 0 },
-        { name: 'At Risk', value: 0 },
-        { name: 'Unknown', value: 0 }
-      ])
-    }
+    const complianceStatsPayload = result.length === 0
+      ? [
+          { name: 'Compliant', value: 0 },
+          { name: 'Non-Compliant', value: 0 },
+          { name: 'At Risk', value: 0 },
+          { name: 'Unknown', value: 0 }
+        ]
+      : result
 
-    return NextResponse.json(result)
+    return NextResponse.json({ complianceStats: complianceStatsPayload })
 
   } catch (error) {
     console.error('Dashboard compliance error:', error)

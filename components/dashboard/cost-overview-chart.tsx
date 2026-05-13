@@ -21,7 +21,7 @@ export function CostOverviewChart() {
       try {
         const response = await fetch('/api/dashboard/costs')
         const result = await response.json()
-        setData(result)
+        setData(Array.isArray(result) ? result : result.chartData || [])
       } catch (error) {
         console.error('Error fetching cost data:', error)
       } finally {

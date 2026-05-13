@@ -196,7 +196,7 @@ export default function CostsPageClient() {
       const response = await fetch('/api/dashboard/costs')
       if (response.ok) {
         const data = await response.json()
-        setChartData(data.chartData || [])
+        setChartData(Array.isArray(data) ? data : data.chartData || [])
       }
     } catch (error) {
       console.error('Error fetching chart data:', error)

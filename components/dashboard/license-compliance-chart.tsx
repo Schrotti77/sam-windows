@@ -21,7 +21,7 @@ export function LicenseComplianceChart() {
       try {
         const response = await fetch('/api/dashboard/compliance')
         const result = await response.json()
-        setData(result)
+        setData(Array.isArray(result) ? result : result.complianceStats || [])
       } catch (error) {
         console.error('Error fetching compliance data:', error)
       } finally {

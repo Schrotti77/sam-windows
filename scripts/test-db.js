@@ -47,17 +47,24 @@ async function main() {
     // Extra diagnostics
     const fs = require('fs');
     const path = require('path');
-    const dbPath = path.join(__dirname, '..', 'prisma', 'sam.db');
-    console.error('\nDB file exists:', fs.existsSync(dbPath));
-    if (fs.existsSync(dbPath)) {
-      const stats = fs.statSync(dbPath);
+    const dbUrl = process.env.DATABASE_URL || '';
+    const dbPath = dbUrl.startsWith('file:')
+      ? dbUrl.replace(/^file:/, '').replace(/^\.\//, '')
+      : 'data/sam.db';
+    const absoluteDbPath = path.isAbsolute(dbPath)
+      ? dbPath
+      : path.join(__dirname, '..', 'prisma', dbPath);
+    console.error('\nDB file exists:', fs.existsSync(absoluteDbPath));
+    if (fs.existsSync(absoluteDbPath)) {
+      const stats = fs.statSync(absoluteDbPath);
+      console.error('DB file path:', absoluteDbPath);
       console.error('DB file size:', stats.size);
       console.error('DB file mode:', stats.mode.toString(8));
     }
     // Check for lock/journal files
     const prismaDir = path.join(__dirname, '..', 'prisma');
-    const files = fs.readdirSync(prismaDir).filter(f => f.includes('sam'));
-    console.error('Files in prisma/:', files);
+    const files = fs.readdirSync(prismaDir, { recursive: true }).filter(f => String(f).includes('sam'));
+    console.error('Files under prisma/:', files);
     
   } finally {
     await prisma.$disconnect();

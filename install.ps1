@@ -378,7 +378,11 @@ if (Test-Path "scripts/seed.js") {
 # ─── Step 10: Build ───────────────────────────────────────────────
 Log-Step 10 12 "Building application..."
 try {
-    & npm run build 2>&1 | ForEach-Object { Log-Info "$_" }
+    if (Test-Path ".\build.cmd") {
+        & cmd.exe /c ".\build.cmd" 2>&1 | ForEach-Object { Log-Info "$_" }
+    } else {
+        & npm run build 2>&1 | ForEach-Object { Log-Info "$_" }
+    }
     if ($LASTEXITCODE -ne 0) { throw "build failed" }
     Log-Ok "Build complete"
 } catch {

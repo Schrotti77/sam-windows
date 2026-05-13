@@ -2,6 +2,9 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
+import { parseAssignmentPayload } from '@/lib/assignment-validation'
+import { parseBudgetPayload } from '@/lib/budget-validation'
 
 
 // Convert ISO date strings to Date objects, return null for invalid/empty
@@ -22,7 +25,31 @@ function cleanRecord(record: any, stripFields: string[] = []) {
   return cleaned
 }
 
+function normalizeBudgetImportDates(budget: any) {
+  const fiscalYear = Number(budget.fiscalYear)
+  if (!Number.isInteger(fiscalYear)) return budget
+
+  const normalized = { ...budget }
+  const startDate = new Date(budget.startDate)
+  const endDate = new Date(budget.endDate)
+
+  // Older exports may contain local-midnight dates serialized as the prior UTC evening.
+  // Normalize those back to fiscal-year date-only values before applying the API validator.
+  if (!Number.isNaN(startDate.getTime()) && startDate.getUTCFullYear() === fiscalYear - 1 && startDate.getUTCMonth() === 11) {
+    normalized.startDate = `${fiscalYear}-01-01`
+  }
+
+  if (!Number.isNaN(endDate.getTime()) && endDate.getUTCFullYear() === fiscalYear && endDate.getUTCMonth() === 11 && endDate.getUTCDate() >= 30) {
+    normalized.endDate = `${fiscalYear}-12-31`
+  }
+
+  return normalized
+}
+
 export async function POST(request: Request) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
+
   try {
     const importData = await request.json()
 
@@ -41,6 +68,8 @@ export async function POST(request: Request) {
       costs: { imported: 0, skipped: 0, errors: 0, errorMessages: [] as string[] },
       alerts: { imported: 0, skipped: 0, errors: 0, errorMessages: [] as string[] },
       contracts: { imported: 0, skipped: 0, errors: 0, errorMessages: [] as string[] },
+      budgets: { imported: 0, skipped: 0, errors: 0, errorMessages: [] as string[] },
+      assignments: { imported: 0, skipped: 0, errors: 0, errorMessages: [] as string[] },
     }
 
     // Build vendor ID mapping (old ID -> new ID) for cross-db transfers
@@ -318,6 +347,72 @@ export async function POST(request: Request) {
           console.error('Contract import error:', e?.message)
           results.contracts.errors++
           results.contracts.errorMessages.push(e?.message || 'Unknown error')
+        }
+      }
+    }
+
+
+
+    // 7. Import Budgets
+    if (data.budgets?.length) {
+      for (const budget of data.budgets) {
+        try {
+          const cleaned = cleanRecord(budget)
+          delete cleaned.createdAt
+          delete cleaned.updatedAt
+
+          const budgetData = parseBudgetPayload(normalizeBudgetImportDates(cleaned))
+          let existing = null
+          try { existing = await prisma.budget.findUnique({ where: { id: budget.id } }) } catch (_e) {}
+
+          if (existing) {
+            await prisma.budget.update({ where: { id: existing.id }, data: budgetData })
+          } else {
+            await prisma.budget.create({ data: budget.id ? { id: budget.id, ...budgetData } : budgetData })
+          }
+          results.budgets.imported++
+        } catch (e: any) {
+          console.error('Budget import error:', e?.message)
+          results.budgets.errors++
+          results.budgets.errorMessages.push(e?.message || 'Unknown error')
+        }
+      }
+    }
+
+    // 8. Import Assignments
+    if (data.assignments?.length) {
+      for (const assignment of data.assignments) {
+        try {
+          const cleaned = cleanRecord(assignment)
+
+          if (cleaned.softwareId) {
+            const mappedSwId = softwareIdMap.get(cleaned.softwareId)
+            if (mappedSwId) {
+              cleaned.softwareId = mappedSwId
+            } else {
+              const swExists = await prisma.software.findUnique({ where: { id: cleaned.softwareId } })
+              if (!swExists) {
+                results.assignments.skipped++
+                results.assignments.errorMessages.push(`${assignment.userId || assignment.id}: Software not found`)
+                continue
+              }
+            }
+          }
+
+          const assignmentData = parseAssignmentPayload(cleaned)
+          let existing = null
+          try { existing = await prisma.softwareAssignment.findUnique({ where: { id: assignment.id } }) } catch (_e) {}
+
+          if (existing) {
+            await prisma.softwareAssignment.update({ where: { id: existing.id }, data: assignmentData })
+          } else {
+            await prisma.softwareAssignment.create({ data: assignment.id ? { id: assignment.id, ...assignmentData } : assignmentData })
+          }
+          results.assignments.imported++
+        } catch (e: any) {
+          console.error('Assignment import error:', e?.message)
+          results.assignments.errors++
+          results.assignments.errorMessages.push(e?.message || 'Unknown error')
         }
       }
     }

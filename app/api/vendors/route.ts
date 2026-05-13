@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
 
 
 export async function GET() {
@@ -33,6 +34,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
+
   try {
     const { 
       name,

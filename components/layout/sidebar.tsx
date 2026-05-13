@@ -14,7 +14,9 @@ import {
   DollarSign, 
   BarChart3, 
   AlertTriangle,
-  Settings
+  Settings,
+  Wallet,
+  UserCheck
 } from 'lucide-react'
 
 const sidebarNavItems = [
@@ -42,6 +44,21 @@ const sidebarNavItems = [
     title: 'Cost Monitoring',
     href: '/costs',
     icon: DollarSign
+  },
+  {
+    title: 'Contract Management',
+    href: '/contracts',
+    icon: FileText
+  },
+  {
+    title: 'Budget Management',
+    href: '/budgets',
+    icon: Wallet
+  },
+  {
+    title: 'Software Assignments',
+    href: '/assignments',
+    icon: UserCheck
   },
   {
     title: 'Reports & Analytics',

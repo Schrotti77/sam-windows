@@ -344,9 +344,9 @@ export default function SoftwarePageClient() {
             className="pl-10"
           />
         </div>
-        <Button variant="outline" onClick={() => alert('Filter function will be implemented')}>
+        <Button variant="outline" disabled title="Filter is not available yet">
           <Filter className="w-4 h-4 mr-2" />
-          Filter
+          Filter is not available yet
         </Button>
       </div>
 

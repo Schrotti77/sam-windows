@@ -3,6 +3,13 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
+import {
+  isInputValidationError,
+  parseOptionalDate,
+  parseOptionalNumber,
+  validationErrorResponse
+} from '@/lib/api-validation'
 
 
 export async function GET() {
@@ -39,6 +46,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
+
   try {
     const body = await request.json()
     const {
@@ -77,6 +87,14 @@ export async function POST(request: Request) {
       )
     }
 
+    const parsedReleaseDate = parseOptionalDate(releaseDate, 'Release date')
+    const parsedInstallationDate = parseOptionalDate(installationDate, 'Installation date')
+    const parsedLastPatchDate = parseOptionalDate(lastPatchDate, 'Last patch date')
+    const parsedSupportExpiry = parseOptionalDate(supportExpiry, 'Support expiry')
+    const parsedPlannedDecommission = parseOptionalDate(plannedDecommission, 'Planned decommission date')
+    const parsedAcquisitionCost = parseOptionalNumber(acquisitionCost, 'Acquisition cost', { min: 0 })
+    const parsedCostPerUser = parseOptionalNumber(costPerUser, 'Cost per user', { min: 0 })
+
     const software = await prisma.software.create({
       data: {
         // Required fields
@@ -85,7 +103,7 @@ export async function POST(request: Request) {
         vendorId,
         // Optional fields with proper defaults
         version: version || null,
-        releaseDate: releaseDate ? new Date(releaseDate) : null,
+        releaseDate: parsedReleaseDate,
         description: description || null,
         functionality: functionality || null,
         deploymentType: deploymentType || null,
@@ -98,22 +116,22 @@ export async function POST(request: Request) {
         technologyPlatform: technologyPlatform || null,
         environment: environment || null,
         installLocation: installLocation || null,
-        installationDate: installationDate ? new Date(installationDate) : null,
+        installationDate: parsedInstallationDate,
         configurationDetails: configurationDetails || null,
         deploymentStatus: deploymentStatus || 'PLANNED',
         hardwareAssociations: hardwareAssociations || null,
         updateStatus: updateStatus || 'UP_TO_DATE',
-        lastPatchDate: lastPatchDate ? new Date(lastPatchDate) : null,
+        lastPatchDate: parsedLastPatchDate,
         maintenanceContract: maintenanceContract || null,
         supportLevel: supportLevel || null,
-        supportExpiry: supportExpiry ? new Date(supportExpiry) : null,
+        supportExpiry: parsedSupportExpiry,
         knownVulnerabilities: knownVulnerabilities || null,
         securityRisks: securityRisks || null,
         maintenanceHistory: maintenanceHistory || null,
-        acquisitionCost: acquisitionCost || null,
+        acquisitionCost: parsedAcquisitionCost,
         budgetAllocation: budgetAllocation || null,
         roiCalculation: roiCalculation || null,
-        costPerUser: costPerUser || null,
+        costPerUser: parsedCostPerUser,
         depreciationSchedule: depreciationSchedule || null,
         regulatoryCompliance: regulatoryCompliance || null,
         complianceStatus: complianceStatus || 'COMPLIANT',
@@ -122,7 +140,7 @@ export async function POST(request: Request) {
         shadowIT: shadowIT || false,
         lifecycleStatus: lifecycleStatus || 'IN_USE',
         needsAssessment: needsAssessment || null,
-        plannedDecommission: plannedDecommission ? new Date(plannedDecommission) : null,
+        plannedDecommission: parsedPlannedDecommission,
         decommissionReason: decommissionReason || null,
         reuseOptions: reuseOptions || null,
         itAdministrator: itAdministrator || null,
@@ -150,6 +168,10 @@ export async function POST(request: Request) {
     return NextResponse.json(software, { status: 201 })
 
   } catch (error) {
+    if (isInputValidationError(error)) {
+      return validationErrorResponse(error)
+    }
+
     console.error('Software creation error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -159,6 +181,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
+
   try {
     const body = await request.json()
     const { 
@@ -204,6 +229,14 @@ export async function PUT(request: Request) {
       )
     }
 
+    const parsedReleaseDate = parseOptionalDate(releaseDate, 'Release date')
+    const parsedInstallationDate = parseOptionalDate(installationDate, 'Installation date')
+    const parsedLastPatchDate = parseOptionalDate(lastPatchDate, 'Last patch date')
+    const parsedSupportExpiry = parseOptionalDate(supportExpiry, 'Support expiry')
+    const parsedPlannedDecommission = parseOptionalDate(plannedDecommission, 'Planned decommission date')
+    const parsedAcquisitionCost = parseOptionalNumber(acquisitionCost, 'Acquisition cost', { min: 0 })
+    const parsedCostPerUser = parseOptionalNumber(costPerUser, 'Cost per user', { min: 0 })
+
     // Update the software
     const software = await prisma.software.update({
       where: { id },
@@ -213,7 +246,7 @@ export async function PUT(request: Request) {
         category,
         vendorId,
         version: version || null,
-        releaseDate: releaseDate ? new Date(releaseDate) : null,
+        releaseDate: parsedReleaseDate,
         description: description || null,
         functionality: functionality || null,
         deploymentType: deploymentType || null,
@@ -232,26 +265,26 @@ export async function PUT(request: Request) {
         
         // Installation data
         installLocation: installLocation || null,
-        installationDate: installationDate ? new Date(installationDate) : null,
+        installationDate: parsedInstallationDate,
         configurationDetails: configurationDetails || null,
         deploymentStatus: deploymentStatus || 'PLANNED',
         hardwareAssociations: hardwareAssociations || null,
         
         // Maintenance data
         updateStatus: updateStatus || 'UP_TO_DATE',
-        lastPatchDate: lastPatchDate ? new Date(lastPatchDate) : null,
+        lastPatchDate: parsedLastPatchDate,
         maintenanceContract: maintenanceContract || null,
         supportLevel: supportLevel || null,
-        supportExpiry: supportExpiry ? new Date(supportExpiry) : null,
+        supportExpiry: parsedSupportExpiry,
         knownVulnerabilities: knownVulnerabilities || null,
         securityRisks: securityRisks || null,
         maintenanceHistory: maintenanceHistory || null,
         
         // Financial data
-        acquisitionCost: acquisitionCost || null,
+        acquisitionCost: parsedAcquisitionCost,
         budgetAllocation: budgetAllocation || null,
         roiCalculation: roiCalculation || null,
-        costPerUser: costPerUser || null,
+        costPerUser: parsedCostPerUser,
         depreciationSchedule: depreciationSchedule || null,
         
         // Compliance data
@@ -264,7 +297,7 @@ export async function PUT(request: Request) {
         // Lifecycle data
         lifecycleStatus: lifecycleStatus || 'IN_USE',
         needsAssessment: needsAssessment || null,
-        plannedDecommission: plannedDecommission ? new Date(plannedDecommission) : null,
+        plannedDecommission: parsedPlannedDecommission,
         decommissionReason: decommissionReason || null,
         reuseOptions: reuseOptions || null,
         
@@ -297,6 +330,10 @@ export async function PUT(request: Request) {
     return NextResponse.json(software)
 
   } catch (error) {
+    if (isInputValidationError(error)) {
+      return validationErrorResponse(error)
+    }
+
     console.error('Software update error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },

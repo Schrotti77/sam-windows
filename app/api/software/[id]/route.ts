@@ -4,11 +4,29 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
+
+function dependencyBlockResponse(counts: { licenses: number; costs: number; alerts: number; assignments: number }) {
+  return NextResponse.json(
+    {
+      error: 'Software cannot be deleted. Remove associated licenses, costs, alerts, and assignments first.',
+      canDelete: false,
+      counts
+    },
+    { status: 400 }
+  )
+}
+
+function isForeignKeyConstraintError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2003'
+}
 
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
   try {
     const { id } = params
 
@@ -21,7 +39,17 @@ export async function DELETE(
 
     // Check if software exists
     const existingSoftware = await prisma.software.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            licenses: true,
+            costs: true,
+            alerts: true,
+            assignments: true
+          }
+        }
+      }
     })
 
     if (!existingSoftware) {
@@ -31,7 +59,13 @@ export async function DELETE(
       )
     }
 
-    // Delete the software (this will cascade delete assignments, licenses, costs due to Prisma schema)
+    const dependencyCounts = existingSoftware._count
+    const hasDependencies = dependencyCounts.licenses > 0 || dependencyCounts.costs > 0 || dependencyCounts.alerts > 0 || dependencyCounts.assignments > 0
+
+    if (hasDependencies) {
+      return dependencyBlockResponse(dependencyCounts)
+    }
+
     await prisma.software.delete({
       where: { id }
     })
@@ -42,6 +76,10 @@ export async function DELETE(
     )
 
   } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      return dependencyBlockResponse({ licenses: 0, costs: 0, alerts: 0, assignments: 0 })
+    }
+
     console.error('Software deletion error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },

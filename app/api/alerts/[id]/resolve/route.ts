@@ -3,12 +3,15 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { requireApiAuth } from '@/lib/simple-auth'
 
 
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const authError = await requireApiAuth()
+  if (authError) return authError
   try {
     const { id } = params
 

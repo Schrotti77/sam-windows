@@ -55,6 +55,13 @@ interface Cost {
   billingPeriod: string
 }
 
+const MONTHS_BY_TIME_RANGE: Record<string, number> = {
+  '3months': 3,
+  '6months': 6,
+  '12months': 12,
+  '24months': 24
+}
+
 export default function ReportsPageClient() {
   const [loading, setLoading] = useState(true)
   const [softwareData, setSoftwareData] = useState<Software[]>([])
@@ -114,17 +121,18 @@ export default function ReportsPageClient() {
       }
 
       // Fetch cost chart data
-      const costChartResponse = await fetch('/api/dashboard/costs')
+      const months = MONTHS_BY_TIME_RANGE[timeRange] || 6
+      const costChartResponse = await fetch(`/api/dashboard/costs?months=${months}`)
       if (costChartResponse.ok) {
         const costs = await costChartResponse.json()
-        setCostData(costs.chartData || [])
+        setCostData(Array.isArray(costs) ? costs : costs.chartData || [])
       }
 
       // Fetch compliance data
       const complianceResponse = await fetch('/api/dashboard/compliance')
       if (complianceResponse.ok) {
         const compliance = await complianceResponse.json()
-        setComplianceData(compliance.complianceStats || [])
+        setComplianceData(Array.isArray(compliance) ? compliance : compliance.complianceStats || [])
       }
     } catch (error) {
       console.error('Error fetching report data:', error)
