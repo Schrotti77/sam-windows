@@ -45,6 +45,16 @@ if (-not (Test-Path ".env")) {
     & powershell -ExecutionPolicy Bypass -File "$samDir\install.ps1" -InstallDir $samDir
 }
 
+# Normalize older relative SQLite URLs before starting. Otherwise the app can
+# write to C:\SAM\prisma\data\sam.db or another fallback instead of C:\SAM\data\sam.db.
+$envText = Get-Content -Path ".env" -Raw
+if ($envText -match 'DATABASE_URL\s*=\s*"file:(\.\/|\.\\|data\/|data\\)') {
+    $absoluteDbUrl = "file:$($samDir -replace '\\', '/')/data/sam.db"
+    $envText = $envText -replace 'DATABASE_URL\s*=\s*"file:[^"]+"', "DATABASE_URL=`"$absoluteDbUrl`""
+    Set-Content -Path ".env" -Value $envText -Encoding UTF8
+    Write-Host "Normalized DATABASE_URL to $absoluteDbUrl" -ForegroundColor Yellow
+}
+
 # Check node_modules
 if (-not (Test-Path "node_modules")) {
     Write-Host "Installing dependencies..." -ForegroundColor Yellow

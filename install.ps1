@@ -320,6 +320,17 @@ NEXTAUTH_URL="http://localhost:$Port"
 } else {
     Log-Ok ".env preserved"
 }
+
+# Normalize older relative SQLite URLs. Prisma CLI resolves file:./data/sam.db
+# relative to prisma/schema.prisma, while the Next.js app expects C:\SAM\data\sam.db.
+# Keeping a relative URL can make the UI write to a different DB than backups/tests.
+$envText = Get-Content -Path $envFile -Raw
+if ($envText -match 'DATABASE_URL\s*=\s*"file:(\.\/|\.\\|data\/|data\\)') {
+    $absoluteDbUrl = "file:$($InstallDir -replace '\\', '/')/data/sam.db"
+    $envText = $envText -replace 'DATABASE_URL\s*=\s*"file:[^"]+"', "DATABASE_URL=`"$absoluteDbUrl`""
+    Set-Content -Path $envFile -Value $envText -Encoding UTF8
+    Log-Info "Normalized DATABASE_URL to $absoluteDbUrl"
+}
 Log-Info "Database: $dataDir\sam.db"
 
 # ─── Step 6: npm install ─────────────────────────────────────────
