@@ -57,4 +57,12 @@ for (const source of [addDialog, editDialog]) {
   assert(source.includes('endDate'), 'Budget dialogs should include endDate');
 }
 
+for (const [label, source] of [['Add', addDialog], ['Edit', editDialog]]) {
+  assert(source.includes('dateInputYear(data.startDate) === data.fiscalYear'), `${label} dialog should validate that fiscal year matches start date year before POST`);
+  assert(source.includes('dateInputYear(data.endDate) === data.fiscalYear'), `${label} dialog should validate that fiscal year matches end date year before POST`);
+  assert(source.includes("setValue('startDate', `${fiscalYear}-01-01`"), `${label} dialog should keep start date in sync when fiscal year changes`);
+  assert(source.includes("setValue('endDate', `${fiscalYear}-12-31`"), `${label} dialog should keep end date in sync when fiscal year changes`);
+  assert(source.includes('handleFiscalYearChange'), `${label} dialog should wire fiscal year change handler`);
+}
+
 console.log('Budgets UI CRUD surface checks passed');

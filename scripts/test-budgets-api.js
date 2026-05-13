@@ -3,6 +3,7 @@ const assert = require('assert');
 const BASE_URL = (process.env.BUDGETS_BASE_URL || process.env.SMOKE_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
 const EMAIL = process.env.SMOKE_EMAIL || 'john@doe.com';
 const PASSWORD = process.env.SMOKE_PASSWORD || 'johndoe123';
+const REQUIRE_AUTH = process.env.SAM_REQUIRE_AUTH === 'true';
 
 async function request(path, options = {}) {
   const headers = {
@@ -46,7 +47,15 @@ async function main() {
       endDate: '2026-12-31'
     })
   });
-  assert.strictEqual(unauthCreateRes.status, 401, 'unauthenticated budget create should return 401');
+  if (REQUIRE_AUTH) {
+    assert.strictEqual(unauthCreateRes.status, 401, 'unauthenticated budget create should return 401 when SAM_REQUIRE_AUTH=true');
+  } else {
+    assert.strictEqual(unauthCreateRes.status, 201, 'unauthenticated budget create should be allowed when SAM_REQUIRE_AUTH is not true');
+    const unauthCreated = await json(unauthCreateRes);
+    if (unauthCreated && unauthCreated.id) {
+      await request(`/api/budgets/${unauthCreated.id}`, { method: 'DELETE', headers: { Cookie: cookie } });
+    }
+  }
 
   const invalidJsonRes = await request('/api/budgets', {
     method: 'POST',
@@ -157,7 +166,11 @@ async function main() {
         endDate: '2026-12-31'
       })
     });
-    assert.strictEqual(unauthUpdateRes.status, 401, 'unauthenticated budget update should return 401');
+    assert.strictEqual(
+      unauthUpdateRes.status,
+      REQUIRE_AUTH ? 401 : 200,
+      REQUIRE_AUTH ? 'unauthenticated budget update should return 401 when SAM_REQUIRE_AUTH=true' : 'unauthenticated budget update should be allowed when SAM_REQUIRE_AUTH is not true'
+    );
 
     const updateRes = await request(`/api/budgets/${createdId}`, {
       method: 'PUT',
@@ -179,8 +192,10 @@ async function main() {
     assert.strictEqual(updated.department, 'Finance', 'updated department should persist');
     assert.strictEqual(updated.remainingAmount, 9000, 'updated remaining amount should be derived');
 
-    const unauthDeleteRes = await request(`/api/budgets/${createdId}`, { method: 'DELETE' });
-    assert.strictEqual(unauthDeleteRes.status, 401, 'unauthenticated budget delete should return 401');
+    if (REQUIRE_AUTH) {
+      const unauthDeleteRes = await request(`/api/budgets/${createdId}`, { method: 'DELETE' });
+      assert.strictEqual(unauthDeleteRes.status, 401, 'unauthenticated budget delete should return 401 when SAM_REQUIRE_AUTH=true');
+    }
 
     const deleteRes = await request(`/api/budgets/${createdId}`, {
       method: 'DELETE',

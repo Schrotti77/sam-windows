@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEventHandler } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,10 @@ const numberFromInput = (fieldName: string, min = 0) => z.preprocess(
   (value) => value === '' || value === null || value === undefined ? undefined : Number(value),
   z.number({ required_error: `${fieldName} is required`, invalid_type_error: `${fieldName} must be a valid number` }).min(min, `${fieldName} must be at least ${min}`)
 )
+const dateInputYear = (value: string) => {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value)
+  return match ? Number(match[1]) : new Date(value).getFullYear()
+}
 
 const budgetSchema = z.object({
   name: z.string().trim().min(1, 'Name is required'),
@@ -40,6 +44,9 @@ const budgetSchema = z.object({
 }).refine((data) => data.startDate <= data.endDate, {
   message: 'End date must be on or after start date',
   path: ['endDate']
+}).refine((data) => dateInputYear(data.startDate) === data.fiscalYear && dateInputYear(data.endDate) === data.fiscalYear, {
+  message: 'Fiscal year must match the budget date range',
+  path: ['fiscalYear']
 })
 
 type BudgetFormData = z.infer<typeof budgetSchema>
@@ -73,6 +80,7 @@ export default function EditBudgetDialog({ budget, open, onClose, onBudgetUpdate
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors }
   } = useForm<BudgetFormData>({
     resolver: zodResolver(budgetSchema),
@@ -137,6 +145,17 @@ export default function EditBudgetDialog({ budget, open, onClose, onBudgetUpdate
     onClose()
   }
 
+  const fiscalYearRegistration = register('fiscalYear')
+
+  const handleFiscalYearChange: ChangeEventHandler<HTMLInputElement> = (event) => {
+    fiscalYearRegistration.onChange(event)
+    const fiscalYear = Number(event.target.value)
+    if (Number.isInteger(fiscalYear) && fiscalYear >= 1970) {
+      setValue('startDate', `${fiscalYear}-01-01`, { shouldValidate: true })
+      setValue('endDate', `${fiscalYear}-12-31`, { shouldValidate: true })
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -172,7 +191,7 @@ export default function EditBudgetDialog({ budget, open, onClose, onBudgetUpdate
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-fiscalYear">Fiscal Year *</Label>
-              <Input id="edit-fiscalYear" type="number" min="1970" {...register('fiscalYear')} disabled={loading} />
+              <Input id="edit-fiscalYear" type="number" min="1970" {...fiscalYearRegistration} onChange={handleFiscalYearChange} disabled={loading} />
               {errors.fiscalYear && <p className="text-sm text-red-500">{errors.fiscalYear.message}</p>}
             </div>
             <div className="space-y-2">
