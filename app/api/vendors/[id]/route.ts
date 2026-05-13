@@ -5,6 +5,25 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireApiAuth } from '@/lib/simple-auth'
 
+function optionalString(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') return String(value)
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+function internalError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : undefined
+  return NextResponse.json(
+    {
+      error: 'Internal server error',
+      detail: code ? `${code}: ${message}` : message
+    },
+    { status: 500 }
+  )
+}
+
 
 export async function GET(
   request: Request,
@@ -114,14 +133,14 @@ export async function PUT(
       where: { id: params.id },
       data: {
         name,
-        contactEmail,
-        contactPhone,
-        website,
-        address,
-        supportEmail,
-        supportPhone,
-        accountManager,
-        notes,
+        contactEmail: optionalString(contactEmail),
+        contactPhone: optionalString(contactPhone),
+        website: optionalString(website),
+        address: optionalString(address),
+        supportEmail: optionalString(supportEmail),
+        supportPhone: optionalString(supportPhone),
+        accountManager: optionalString(accountManager),
+        notes: optionalString(notes),
         isActive: isActive !== undefined ? isActive : existingVendor.isActive
       },
       include: {
@@ -138,10 +157,7 @@ export async function PUT(
 
   } catch (error) {
     console.error('Vendor update error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return internalError(error)
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "sam-windows",
-  "version": "4.5.5",
+  "version": "4.5.6",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,7 +15,7 @@
     "test:seed": "node scripts/test-seed-idempotent.js",
     "smoke": "node scripts/smoke.js",
     "verify:install": "npm run test:deployment && npm run test:db",
-    "verify:running": "npm run smoke && npm run test:api-auth && npm run test:reports && npm run test:crud && npm run test:ui-placeholders && npm run test:ui-surfaces && npm run test:contracts && npm run test:contracts-ui && npm run test:budgets && npm run test:budgets-ui && npm run test:assignments && npm run test:assignments-ui && npm run test:import-export",
+    "verify:running": "npm run smoke && npm run test:api-auth && npm run test:vendor-update && npm run test:reports && npm run test:crud && npm run test:ui-placeholders && npm run test:ui-surfaces && npm run test:contracts && npm run test:contracts-ui && npm run test:budgets && npm run test:budgets-ui && npm run test:assignments && npm run test:assignments-ui && npm run test:import-export",
     "test:api-auth": "node scripts/test-api-auth.js",
     "test:reports": "node scripts/test-dashboard-reports.js",
     "test:crud": "node scripts/test-crud-validation.js",
@@ -27,7 +27,8 @@
     "test:import-export": "node scripts/test-import-export-coverage.js",
     "test:budgets-ui": "node scripts/test-budgets-ui-crud-surface.js",
     "test:contracts-ui": "node scripts/test-contracts-ui-crud-surface.js",
-    "test:assignments-ui": "node scripts/test-assignments-ui-crud-surface.js"
+    "test:assignments-ui": "node scripts/test-assignments-ui-crud-surface.js",
+    "test:vendor-update": "node scripts/test-vendor-update.js"
   },
   "overrides": {
     "react": "$react",

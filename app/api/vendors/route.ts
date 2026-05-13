@@ -5,6 +5,13 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireApiAuth } from '@/lib/simple-auth'
 
+function optionalString(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') return String(value)
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
 
 export async function GET() {
   try {
@@ -73,14 +80,14 @@ export async function POST(request: Request) {
     const vendor = await prisma.vendor.create({
       data: {
         name,
-        contactEmail,
-        contactPhone,
-        website,
-        address,
-        supportEmail,
-        supportPhone,
-        accountManager,
-        notes,
+        contactEmail: optionalString(contactEmail),
+        contactPhone: optionalString(contactPhone),
+        website: optionalString(website),
+        address: optionalString(address),
+        supportEmail: optionalString(supportEmail),
+        supportPhone: optionalString(supportPhone),
+        accountManager: optionalString(accountManager),
+        notes: optionalString(notes),
         isActive: isActive !== undefined ? isActive : true
       },
       include: {
