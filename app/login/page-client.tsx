@@ -38,13 +38,13 @@ export default function LoginPageClient() {
       if (!response.ok) {
         setError(data.error || 'Invalid credentials')
       } else {
-        // Save auth info to session storage and cookie
+        // Save non-sensitive auth info for client-side navigation state.
+        // The server sets the real HTTP-only JWT cookie in /api/login.
         const authUser = {
           userId: data.user.id,
           email: data.user.email,
           name: data.user.name,
-          role: data.user.role,
-          token: 'authenticated' // We'll use session storage as primary method
+          role: data.user.role
         }
         saveAuth(authUser)
         
