@@ -272,6 +272,36 @@ $logDir = $finalLogDir
 Set-Location $InstallDir
 Log-Info "Working directory: $PWD"
 
+# ─── Stop running app before touching node_modules / Prisma engines ─────
+# On Windows, a running Next/PM2 process can keep query_engine-windows.dll.node
+# locked, making `prisma generate` fail with EPERM on rename.
+if ($Update) {
+    Log-Info "Stopping running SAM processes before update..."
+
+    if (Test-Command "pm2") {
+        try {
+            & pm2 stop sam 2>&1 | ForEach-Object { Log-Info "$_" }
+        } catch {
+            Log-Warn "PM2 stop failed or app was not registered: $_"
+        }
+    }
+
+    try {
+        $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        foreach ($conn in $listeners) {
+            $procInfo = Get-CimInstance Win32_Process -Filter "ProcessId=$($conn.OwningProcess)" -ErrorAction SilentlyContinue
+            $cmd = if ($procInfo) { [string]$procInfo.CommandLine } else { "" }
+            if ($cmd -like "*$InstallDir*" -or $cmd -like "*next start*" -or $cmd -like "*npm*start*") {
+                Log-Info "Stopping process on port $Port (PID $($conn.OwningProcess))"
+                Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+            }
+        }
+        Start-Sleep -Seconds 2
+    } catch {
+        Log-Warn "Port cleanup skipped: $_"
+    }
+}
+
 # ─── Step 4: Data directory ───────────────────────────────────────
 Log-Step 4 12 "Setting up data directory..."
 $dataDir = Join-Path $InstallDir "data"
